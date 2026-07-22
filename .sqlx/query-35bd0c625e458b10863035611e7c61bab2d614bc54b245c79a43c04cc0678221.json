@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO flock (flock_code, key_generation, owner_user_id, label)\n                VALUES ($1, $2, $3, $4)\n                ON CONFLICT (flock_code) DO NOTHING\n                RETURNING id, flock_code, key_generation, owner_user_id, label,\n                          created_at AS \"created_at: jiff_sqlx::Timestamp\"\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "flock_code",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "key_generation",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 3,
+        "name": "owner_user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bpchar",
+        "Int2",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "35bd0c625e458b10863035611e7c61bab2d614bc54b245c79a43c04cc0678221"
+}

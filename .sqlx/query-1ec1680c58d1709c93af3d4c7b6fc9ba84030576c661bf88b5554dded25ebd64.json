@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO app_user (issuer, subject, display_name, email, is_admin)\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (issuer, subject) DO UPDATE SET\n                display_name = COALESCE(EXCLUDED.display_name, app_user.display_name),\n                email        = COALESCE(EXCLUDED.email, app_user.email),\n                is_admin     = app_user.is_admin OR EXCLUDED.is_admin\n            RETURNING id, issuer, subject, display_name, email, is_admin,\n                      created_at AS \"created_at: jiff_sqlx::Timestamp\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "issuer",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "subject",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "display_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_admin",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "1ec1680c58d1709c93af3d4c7b6fc9ba84030576c661bf88b5554dded25ebd64"
+}

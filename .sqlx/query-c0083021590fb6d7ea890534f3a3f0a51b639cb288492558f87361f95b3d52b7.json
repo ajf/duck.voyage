@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, code, flock_id, flock_seq, name, description,\n                   originated_at AS \"originated_at: jiff_sqlx::Timestamp\",\n                   set_sail_at AS \"set_sail_at: jiff_sqlx::Timestamp\",\n                   origin_photo_key, origin_photo_content_type,\n                   created_at AS \"created_at: jiff_sqlx::Timestamp\"\n            FROM duck WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "flock_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "flock_seq",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "originated_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "set_sail_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "origin_photo_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "origin_photo_content_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "c0083021590fb6d7ea890534f3a3f0a51b639cb288492558f87361f95b3d52b7"
+}

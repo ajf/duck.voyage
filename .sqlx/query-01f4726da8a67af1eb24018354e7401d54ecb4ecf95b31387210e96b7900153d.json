@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT s.id, s.seen_at AS \"seen_at: jiff_sqlx::Timestamp\", s.note,\n                   s.photo_key IS NOT NULL AS \"has_photo!\",\n                   s.latitude, s.longitude,\n                   s.created_at AS \"created_at: jiff_sqlx::Timestamp\",\n                   v.name AS vessel_name, u.display_name AS by_display_name\n            FROM sighting s\n            JOIN vessel v ON v.id = s.vessel_id\n            JOIN app_user u ON u.id = s.user_id\n            WHERE s.duck_id = $1\n            ORDER BY s.seen_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "seen_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "note",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "has_photo!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "latitude",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "longitude",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "vessel_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "by_display_name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "01f4726da8a67af1eb24018354e7401d54ecb4ecf95b31387210e96b7900153d"
+}

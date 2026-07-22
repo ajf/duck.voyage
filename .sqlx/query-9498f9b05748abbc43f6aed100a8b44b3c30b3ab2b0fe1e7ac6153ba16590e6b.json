@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.code AS duck_code, d.name AS duck_name, v.name AS vessel_name,\n                   s.seen_at AS \"seen_at: jiff_sqlx::Timestamp\",\n                   n.created_at AS \"created_at: jiff_sqlx::Timestamp\",\n                   n.read_at IS NULL AS \"unread!\"\n            FROM notification n\n            JOIN duck d ON d.id = n.duck_id\n            JOIN sighting s ON s.id = n.sighting_id\n            JOIN vessel v ON v.id = s.vessel_id\n            WHERE n.user_id = $1\n            ORDER BY n.created_at DESC\n            LIMIT $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "duck_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "duck_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "vessel_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "seen_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "unread!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "9498f9b05748abbc43f6aed100a8b44b3c30b3ab2b0fe1e7ac6153ba16590e6b"
+}

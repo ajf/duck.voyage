@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO notification (user_id, duck_id, sighting_id)\n            SELECT f.user_id, $1, $2 FROM duck_follow f\n            WHERE f.duck_id = $1 AND f.user_id <> $3\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cafc7b94b8fe6b2a266090469fb19b795fd2820d526a02bd7afe7449cb2d142e"
+}

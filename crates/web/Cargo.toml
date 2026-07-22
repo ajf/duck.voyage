@@ -1,0 +1,30 @@
+[package]
+name = "web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domain.workspace = true
+storage.workspace = true
+auth.workspace = true
+
+anyhow.workspace = true
+axum = { version = "0.8.9", features = ["macros", "multipart"] }
+bytes = "1"
+dotenvy = "0.15.7"
+hex = "0.4.3"
+image = "0.25.10"
+jiff.workspace = true
+maud = { version = "0.27.0", features = ["axum"] }
+qrcode = "0.14.1"
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror.workspace = true
+tokio = { version = "1.53", features = ["full"] }
+tower = "0.5.3"
+tower-http = { version = "0.7.0", features = ["trace"] }
+tower-sessions = "0.14.0"
+tower-sessions-sqlx-store = { version = "0.15.0", features = ["postgres"] }
+tower_governor = "0.8.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"

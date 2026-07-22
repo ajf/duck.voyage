@@ -1,0 +1,21 @@
+[package]
+name = "storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domain.workspace = true
+thiserror.workspace = true
+jiff.workspace = true
+jiff-sqlx = { version = "0.1", features = ["postgres"] }
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls-ring",
+    "postgres",
+    "macros",
+    "migrate",
+] }
+rand = "0.9"
+object_store = { version = "0.12", features = ["aws"] }
+bytes = "1"

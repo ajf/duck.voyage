@@ -1,0 +1,15 @@
+[package]
+name = "auth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum = "0.8.9"
+domain.workspace = true
+jiff.workspace = true
+jsonwebtoken = "10.4.0"
+openidconnect = { version = "4.0.1", features = ["reqwest"] }
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror.workspace = true
+tower-sessions = "0.14.0"

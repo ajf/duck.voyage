@@ -1,0 +1,41 @@
+{
+  "realm": "ducks",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "duck-web",
+      "name": "Duck Tracker (local dev)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "duck-web-secret",
+      "redirectUris": ["http://localhost:3000/*", "http://172.16.0.204:3000/*" ],
+      "webOrigins": ["http://localhost:3000"],
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    }
+  ],
+  "users": [
+    {
+      "username": "andrew",
+      "enabled": true,
+      "email": "andrew@local.test",
+      "emailVerified": true,
+      "firstName": "Andrew",
+      "lastName": "Local",
+      "credentials": [{ "type": "password", "value": "duck", "temporary": false }]
+    },
+    {
+      "username": "stranger",
+      "enabled": true,
+      "email": "stranger@local.test",
+      "emailVerified": true,
+      "firstName": "Sally",
+      "lastName": "Stranger",
+      "credentials": [{ "type": "password", "value": "duck", "temporary": false }]
+    }
+  ]
+}

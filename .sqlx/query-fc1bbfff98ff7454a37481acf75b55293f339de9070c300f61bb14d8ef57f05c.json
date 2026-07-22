@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.code AS duck_code, d.name AS duck_name,\n                   f.created_at AS \"followed_at: jiff_sqlx::Timestamp\"\n            FROM duck_follow f JOIN duck d ON d.id = f.duck_id\n            WHERE f.user_id = $1 ORDER BY f.created_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "duck_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "duck_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "followed_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "fc1bbfff98ff7454a37481acf75b55293f339de9070c300f61bb14d8ef57f05c"
+}

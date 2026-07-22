@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = ["crates/domain", "crates/storage", "crates/auth", "crates/web"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.0"
+
+[workspace.dependencies]
+domain = { path = "crates/domain" }
+storage = { path = "crates/storage" }
+auth = { path = "crates/auth" }
+
+aes = "0.7" # version paired to fpe 0.5.1 (cipher 0.3 traits)
+anyhow = "1"
+# Pinned exactly: 0.6+ hardcodes the revised NIST domain floor (min 4 digits
+# at radix 36), rejecting our 3-char payload — a trade-off duck-voyage.md §3.2
+# accepts knowingly. The codec's output is frozen once labels print, so any
+# upgrade must keep the golden-vector test green.
+fpe = "=0.5.1"
+jiff = "0.2"
+proptest = "1"
+thiserror = "2"

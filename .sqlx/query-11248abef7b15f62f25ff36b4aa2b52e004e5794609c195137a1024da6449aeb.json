@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, duck_id, vessel_id, user_id,\n                   seen_at AS \"seen_at: jiff_sqlx::Timestamp\",\n                   note, photo_key, photo_content_type, latitude, longitude,\n                   created_at AS \"created_at: jiff_sqlx::Timestamp\"\n            FROM sighting WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "duck_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "vessel_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "seen_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "note",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "photo_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "photo_content_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "latitude",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "longitude",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "11248abef7b15f62f25ff36b4aa2b52e004e5794609c195137a1024da6449aeb"
+}

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.code, d.name,\n                   (SELECT COUNT(*) FROM sighting sc WHERE sc.duck_id = d.id) AS \"sighting_count!\",\n                   last.seen_at AS \"last_seen_at!: jiff_sqlx::Timestamp\",\n                   v.name AS \"last_vessel_name!\"\n            FROM duck d\n            JOIN LATERAL (\n                SELECT s.seen_at, s.vessel_id FROM sighting s\n                WHERE s.duck_id = d.id ORDER BY s.seen_at DESC LIMIT 1\n            ) last ON true\n            JOIN vessel v ON v.id = last.vessel_id\n            ORDER BY 3 DESC, last.seen_at DESC\n            LIMIT $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "sighting_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_seen_at!: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "last_vessel_name!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "68c3ed4ba74aa4f1dec5ac2a5a9af0188ff746987e9fa2014903b7f9b9739329"
+}

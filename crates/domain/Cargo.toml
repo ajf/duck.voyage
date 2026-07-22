@@ -1,0 +1,14 @@
+[package]
+name = "domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aes.workspace = true
+fpe.workspace = true
+jiff.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

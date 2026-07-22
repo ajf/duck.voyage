@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO duck_follow (user_id, duck_id) VALUES ($1, $2)\n            ON CONFLICT DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c7a6034a26aa726c76e62a3b9033c1e71534ff448d55bb6bd93eac3d44ed5da9"
+}

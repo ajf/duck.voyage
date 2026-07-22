@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, flock_code, key_generation, owner_user_id, label,\n                   created_at AS \"created_at: jiff_sqlx::Timestamp\"\n            FROM flock WHERE flock_code = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "flock_code",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "key_generation",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 3,
+        "name": "owner_user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bpchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e332584efd3232703baf2b62c1f08c1998332ab68c5dbe22cfaa2f89a6d42555"
+}

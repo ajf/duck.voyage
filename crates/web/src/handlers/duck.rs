@@ -203,11 +203,31 @@ pub async fn log_sighting(
         .ok_or_else(|| WebError::BadRequest("unknown vessel".into()))?;
     // DECISION: the datetime-local input is taken as UTC for v1; sightings
     // are day-granularity in practice and phones don't send their zone here.
-    let seen_at = DateTime::strptime("%Y-%m-%dT%H:%M", form.require_text("seen_at")?)
-        .map_err(|e| WebError::BadRequest(format!("seen_at: {e}")))?
-        .to_zoned(TimeZone::UTC)
-        .map_err(|e| WebError::BadRequest(format!("seen_at: {e}")))?
-        .timestamp();
+    // Optional — blank means "right now" — and bounded: ship internet makes
+    // delayed logging the norm, so backdating is legitimate, but only within
+    // a sane window. `created_at` remains the trustworthy server-side time.
+    let seen_at = match form.text("seen_at") {
+        None => jiff::Timestamp::now(),
+        Some(raw) => {
+            let parsed = DateTime::strptime("%Y-%m-%dT%H:%M", raw)
+                .map_err(|e| WebError::BadRequest(format!("seen_at: {e}")))?
+                .to_zoned(TimeZone::UTC)
+                .map_err(|e| WebError::BadRequest(format!("seen_at: {e}")))?
+                .timestamp();
+            let now = jiff::Timestamp::now().as_second();
+            // +18h grace: wall-clock input read as UTC can look up to ~14h
+            // ahead from far-east time zones. 60 days: the longest cruise
+            // plus getting around to it.
+            ((now - 60 * 86_400..=now + 18 * 3_600).contains(&parsed.as_second()))
+                .then_some(parsed)
+                .ok_or_else(|| {
+                    WebError::BadRequest(
+                        "the sighting time must be within the last 60 days and not in the future"
+                            .into(),
+                    )
+                })?
+        }
+    };
     let note = form
         .text("note")
         .map(|n| Note::parse(n).map_err(|e| WebError::BadRequest(format!("note: {e}"))))

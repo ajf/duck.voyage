@@ -365,8 +365,8 @@ impl Page {
                             (Self::vessel_options(vessels))
                         }
                     }
-                    label { "When?"
-                        input type="datetime-local" name="seen_at" required;
+                    label { "When? (leave as-is if just now)"
+                        input type="datetime-local" name="seen_at" id="seen-at";
                     }
                     label { "Note (optional)"
                         textarea name="note" rows="2"
@@ -613,10 +613,18 @@ impl Page {
     }
 }
 
-/// Browser geolocation for the sighting form: fills the hidden lat/lon
-/// fields on request. Pure enhancement — without JS (or permission) the form
-/// submits without coordinates.
+/// Sighting-form enhancements: prefill the "when" field with the finder's
+/// current wall-clock time, and fill the hidden lat/lon fields on request.
+/// Pure enhancement — without JS the field stays blank (server: "now") and
+/// the form submits without coordinates.
 const GEO_JS: &str = r#"
+(function () {
+  var el = document.getElementById("seen-at");
+  if (el && !el.value) {
+    var d = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+    el.value = d.toISOString().slice(0, 16);
+  }
+})();
 function duckAttachLocation() {
   var status = document.getElementById("geo-status");
   if (!navigator.geolocation) { status.textContent = "geolocation unavailable"; return; }

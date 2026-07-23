@@ -23,10 +23,14 @@ pub struct Caps {
 
 /// Typed config loaded from env at boot. The app refuses to start when a
 /// required value is missing — fail fast, no unwraps later.
+///
+/// This is generic self-hostable software: nothing here assumes a particular
+/// platform. Reasonable defaults mean a minimal install needs only
+/// `DATABASE_URL`, `BASE_URL`, one FF1 key, and one OIDC provider.
 pub struct AppConfig {
     pub database_url: String,
     pub base_url: String,
-    pub listen_port: u16,
+    pub listen_addr: std::net::SocketAddr,
     pub ff1_keys: Vec<(KeyGeneration, [u8; 32])>,
     pub current_generation: KeyGeneration,
     pub storage: StorageConfig,
@@ -36,11 +40,19 @@ pub struct AppConfig {
     pub caps: Caps,
 }
 
-pub struct StorageConfig {
-    pub endpoint: String,
-    pub bucket: String,
-    pub access_key: String,
-    pub secret_key: String,
+/// Where photos live. S3-compatible when `STORAGE_ENDPOINT` is set
+/// (MinIO, Tigris, AWS, …); otherwise a plain directory on disk — the
+/// zero-dependency default for small self-hosted installs.
+pub enum StorageConfig {
+    S3 {
+        endpoint: String,
+        bucket: String,
+        access_key: String,
+        secret_key: String,
+    },
+    Local {
+        path: std::path::PathBuf,
+    },
 }
 
 impl AppConfig {
@@ -68,15 +80,29 @@ impl AppConfig {
         );
 
         let base_url = required("BASE_URL")?.trim_end_matches('/').to_owned();
-        let listen_port = optional("PORT")
-            .map(|p| {
-                p.parse::<u16>().map_err(|e| ConfigError::Invalid {
-                    var: "PORT".into(),
+        // Default listener is dual-stack: `[::]` accepts both IPv6 and
+        // IPv4-mapped connections on Linux. `LISTEN_ADDR` overrides entirely
+        // (e.g. `0.0.0.0:3000` on a v6-less host); `PORT` tweaks just the port.
+        let listen_addr = match optional("LISTEN_ADDR") {
+            Some(addr) => addr
+                .parse::<std::net::SocketAddr>()
+                .map_err(|e| ConfigError::Invalid {
+                    var: "LISTEN_ADDR".into(),
                     detail: e.to_string(),
-                })
-            })
-            .transpose()?
-            .unwrap_or(3000);
+                })?,
+            None => {
+                let port = optional("PORT")
+                    .map(|p| {
+                        p.parse::<u16>().map_err(|e| ConfigError::Invalid {
+                            var: "PORT".into(),
+                            detail: e.to_string(),
+                        })
+                    })
+                    .transpose()?
+                    .unwrap_or(3000);
+                std::net::SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, port))
+            }
+        };
 
         let admin_identities = optional("ADMIN_IDENTITIES")
             .map(|raw| {
@@ -99,18 +125,27 @@ impl AppConfig {
             optional(var).and_then(|v| v.parse().ok()).unwrap_or(default)
         };
 
-        Ok(Self {
-            database_url: required("DATABASE_URL")?,
-            listen_port,
-            ff1_keys,
-            current_generation,
-            storage: StorageConfig {
-                endpoint: required("STORAGE_ENDPOINT")?,
+        let storage = match optional("STORAGE_ENDPOINT") {
+            Some(endpoint) => StorageConfig::S3 {
+                endpoint,
                 bucket: required("STORAGE_BUCKET")?,
                 access_key: required("STORAGE_ACCESS_KEY")?,
                 secret_key: required("STORAGE_SECRET_KEY")?,
             },
-            oidc: Self::oidc_from_env(&optional),
+            None => StorageConfig::Local {
+                path: optional("STORAGE_LOCAL_PATH")
+                    .unwrap_or_else(|| "./photos".into())
+                    .into(),
+            },
+        };
+
+        Ok(Self {
+            database_url: required("DATABASE_URL")?,
+            listen_addr,
+            ff1_keys,
+            current_generation,
+            storage,
+            oidc: Self::oidc_from_env(&optional)?,
             admin_identities,
             caps: Caps {
                 flocks_per_user: cap("CAP_FLOCKS_PER_USER", 10),
@@ -136,9 +171,16 @@ impl AppConfig {
         Ok((KeyGeneration::new(generation), key))
     }
 
-    /// Each provider activates when its env vars are present; issuer URLs for
-    /// the big three are fixed knowledge, Keycloak's comes from config.
-    fn oidc_from_env(optional: &dyn Fn(&str) -> Option<String>) -> Vec<OidcProviderConfig> {
+    /// Each provider activates when its env vars are present. The big three
+    /// (Google, Microsoft, Apple) have well-known issuers and quirks, so
+    /// they get dedicated variables. *Any other* spec-compliant OIDC
+    /// provider — Keycloak, Authentik, Authelia, Zitadel, Okta, … — is
+    /// configured generically: `OIDC_<SLUG>_ISSUER`, `OIDC_<SLUG>_CLIENT_ID`,
+    /// `OIDC_<SLUG>_SECRET`, and optionally `OIDC_<SLUG>_DISPLAY_NAME`.
+    /// The slug becomes the login-route path segment, lowercased.
+    fn oidc_from_env(
+        optional: &dyn Fn(&str) -> Option<String>,
+    ) -> Result<Vec<OidcProviderConfig>, ConfigError> {
         let google = optional("OIDC_GOOGLE_CLIENT_ID").zip(optional("OIDC_GOOGLE_SECRET")).map(
             |(client_id, secret)| OidcProviderConfig {
                 slug: "google".into(),
@@ -168,16 +210,46 @@ impl AppConfig {
                 client_id,
                 secret: SecretSource::Apple(AppleSecret { team_id, key_id, private_key_pem }),
             });
-        let keycloak = optional("OIDC_KEYCLOAK_ISSUER")
-            .zip(optional("OIDC_KEYCLOAK_CLIENT_ID"))
-            .zip(optional("OIDC_KEYCLOAK_SECRET"))
-            .map(|((issuer_url, client_id), secret)| OidcProviderConfig {
-                slug: "keycloak".into(),
-                display_name: "Keycloak".into(),
-                issuer_url,
-                client_id,
-                secret: SecretSource::Static(secret),
-            });
-        [google, entra, apple, keycloak].into_iter().flatten().collect()
+        // Generic providers: every OIDC_<SLUG>_ISSUER in the environment
+        // declares one. Slugs owned by the dedicated branches above are
+        // reserved (their issuer is not configurable).
+        const RESERVED: [&str; 3] = ["GOOGLE", "ENTRA", "APPLE"];
+        let generic = std::env::vars()
+            .filter_map(|(key, _)| {
+                key.strip_prefix("OIDC_")
+                    .and_then(|rest| rest.strip_suffix("_ISSUER"))
+                    .filter(|slug| !RESERVED.contains(slug))
+                    .map(str::to_owned)
+            })
+            .map(|slug| {
+                let var = |suffix: &str| optional(&format!("OIDC_{slug}_{suffix}"));
+                let require = |suffix: &str| {
+                    var(suffix).ok_or_else(|| ConfigError::Invalid {
+                        var: format!("OIDC_{slug}_{suffix}"),
+                        detail: format!("required because OIDC_{slug}_ISSUER is set"),
+                    })
+                };
+                let display_name = var("DISPLAY_NAME").unwrap_or_else(|| {
+                    let lower = slug.to_lowercase();
+                    let mut chars = lower.chars();
+                    chars
+                        .next()
+                        .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
+                        .unwrap_or(lower)
+                });
+                Ok(OidcProviderConfig {
+                    slug: slug.to_lowercase(),
+                    display_name,
+                    issuer_url: require("ISSUER")?,
+                    client_id: require("CLIENT_ID")?,
+                    secret: SecretSource::Static(require("SECRET")?),
+                })
+            })
+            .collect::<Result<Vec<_>, ConfigError>>()?;
+        Ok([google, entra, apple]
+            .into_iter()
+            .flatten()
+            .chain(generic)
+            .collect())
     }
 }

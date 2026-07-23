@@ -1,0 +1,29 @@
+# Example Fly.io deployment. Entirely optional — the app is platform-
+# agnostic (see README "Deployment"); this file only matters if you happen
+# to deploy with `fly deploy`. Secrets (DATABASE_URL, DUCK_KEY_GEN_*,
+# OIDC_*, STORAGE_*) are supplied via `fly secrets set`, never here.
+
+app = "duck-voyage"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Fly's private network is IPv6; the app's default listener is already
+  # dual-stack `[::]:3000`, stated here for clarity.
+  LISTEN_ADDR = "[::]:3000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"

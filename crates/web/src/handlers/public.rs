@@ -33,6 +33,12 @@ pub async fn missing(
     Ok(Page::missing(&nav, &ducks).into_response())
 }
 
+/// Liveness probe for load balancers and platform health checks. Cheap on
+/// purpose: no database round-trip.
+pub async fn healthz() -> &'static str {
+    "ok"
+}
+
 pub async fn htmx_js() -> Response {
     (
         [

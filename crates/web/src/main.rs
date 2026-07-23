@@ -42,12 +42,15 @@ async fn main() -> anyhow::Result<()> {
     session_store.migrate().await?;
 
     let codec = DuckCodec::new(config.ff1_keys.clone(), config.current_generation)?;
-    let photos = PhotoStore::s3_compatible(
-        &config.storage.endpoint,
-        &config.storage.bucket,
-        &config.storage.access_key,
-        &config.storage.secret_key,
-    )?;
+    let photos = match &config.storage {
+        config::StorageConfig::S3 { endpoint, bucket, access_key, secret_key } => {
+            PhotoStore::s3_compatible(endpoint, bucket, access_key, secret_key)?
+        }
+        config::StorageConfig::Local { path } => {
+            std::fs::create_dir_all(path)?;
+            PhotoStore::local(path)?
+        }
+    };
     let oidc = auth::OidcProviders::discover(config.oidc, &config.base_url).await?;
 
     let secure_cookies = config.base_url.starts_with("https");
@@ -85,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
 
     let public_routes = Router::new()
         .route("/", get(handlers::public::front))
+        .route("/healthz", get(handlers::public::healthz))
         .route("/missing", get(handlers::public::missing))
         .route("/static/htmx.min.js", get(handlers::public::htmx_js))
         .route("/login", get(handlers::auth_routes::login_page))
@@ -138,8 +142,7 @@ async fn main() -> anyhow::Result<()> {
     // Router::layer runs after routing, too late to change the matched path).
     let app = axum::middleware::map_request(uppercase_scan_path).layer(router);
 
-    let listener =
-        tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], config.listen_port))).await?;
+    let listener = tokio::net::TcpListener::bind(config.listen_addr).await?;
     tracing::info!("listening on http://{}", listener.local_addr()?);
     axum::serve(
         listener,

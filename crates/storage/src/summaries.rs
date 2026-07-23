@@ -10,8 +10,20 @@ pub struct DuckSummary {
     pub code: DuckCode,
     pub name: Option<String>,
     pub sighting_count: i64,
+    /// How many distinct vessels it has been found aboard.
+    pub unique_vessels: i64,
     pub last_seen_at: Timestamp,
     pub last_vessel_name: String,
+}
+
+/// One row of the front page's "latest finds" feed.
+#[derive(Debug, Clone)]
+pub struct RecentFind {
+    pub duck_code: DuckCode,
+    pub duck_name: Option<String>,
+    pub vessel_name: String,
+    pub by_display_name: Option<String>,
+    pub seen_at: Timestamp,
 }
 
 /// One row of a duck page's sighting history.

@@ -15,9 +15,11 @@ pub async fn front(
 ) -> Result<Response, WebError> {
     let nav = nav(&state, user.as_ref()).await?;
     let limit = state.caps().front_page_limit;
-    let recent = state.ducks().recently_found(limit).await?;
-    let most = state.ducks().most_sighted(limit).await?;
-    Ok(Page::front(&nav, &recent, &most).into_response())
+    let latest = state.sightings().recent(limit).await?;
+    let traveled = state.ducks().most_traveled(limit).await?;
+    let seen = state.ducks().most_sighted(limit).await?;
+    let adrift = state.ducks().longest_since_sighting(limit).await?;
+    Ok(Page::front(&nav, &latest, &traveled, &seen, &adrift).into_response())
 }
 
 pub async fn missing(

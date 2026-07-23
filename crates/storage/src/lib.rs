@@ -21,5 +21,5 @@ pub use repos::{
 };
 pub use summaries::{
     CommentView, DuckSummary, FlockDuckStatus, FollowedDuck, MySighting, NotificationView,
-    SightingView, VesselOption,
+    RecentFind, SightingView, VesselOption,
 };

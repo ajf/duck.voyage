@@ -16,7 +16,7 @@ use crate::error::RepoError;
 use crate::rows::{DuckRow, FlockRow, SightingRow, UserRow, VesselRow};
 use crate::summaries::{
     CommentView, DuckSummary, FlockDuckStatus, FollowedDuck, MySighting, NotificationView,
-    SightingView, VesselOption,
+    RecentFind, SightingView, VesselOption,
 };
 
 pub struct UserRepo(pub PgPool);
@@ -460,12 +460,13 @@ impl DuckRepo {
             .collect()
     }
 
-    /// Front page: most recently found originated ducks.
-    pub async fn recently_found(&self, limit: i64) -> Result<Vec<DuckSummary>, RepoError> {
+    /// Front page: ducks found aboard the most distinct vessels.
+    pub async fn most_traveled(&self, limit: i64) -> Result<Vec<DuckSummary>, RepoError> {
         let rows = sqlx::query!(
             r#"
             SELECT d.code, d.name,
                    (SELECT COUNT(*) FROM sighting sc WHERE sc.duck_id = d.id) AS "sighting_count!",
+                   (SELECT COUNT(DISTINCT sv.vessel_id) FROM sighting sv WHERE sv.duck_id = d.id) AS "unique_vessels!",
                    last.seen_at AS "last_seen_at!: jiff_sqlx::Timestamp",
                    v.name AS "last_vessel_name!"
             FROM duck d
@@ -475,7 +476,7 @@ impl DuckRepo {
             ) last ON true
             JOIN vessel v ON v.id = last.vessel_id
             WHERE d.deleted_at IS NULL
-            ORDER BY last.seen_at DESC
+            ORDER BY 4 DESC, last.seen_at DESC
             LIMIT $1
             "#,
             limit,
@@ -489,6 +490,7 @@ impl DuckRepo {
                         .map_err(|e| RepoError::corrupt("duck", format!("code: {e}")))?,
                     name: r.name,
                     sighting_count: r.sighting_count,
+                    unique_vessels: r.unique_vessels,
                     last_seen_at: r.last_seen_at.to_jiff(),
                     last_vessel_name: r.last_vessel_name,
                 })
@@ -502,6 +504,7 @@ impl DuckRepo {
             r#"
             SELECT d.code, d.name,
                    (SELECT COUNT(*) FROM sighting sc WHERE sc.duck_id = d.id) AS "sighting_count!",
+                   (SELECT COUNT(DISTINCT sv.vessel_id) FROM sighting sv WHERE sv.duck_id = d.id) AS "unique_vessels!",
                    last.seen_at AS "last_seen_at!: jiff_sqlx::Timestamp",
                    v.name AS "last_vessel_name!"
             FROM duck d
@@ -525,6 +528,47 @@ impl DuckRepo {
                         .map_err(|e| RepoError::corrupt("duck", format!("code: {e}")))?,
                     name: r.name,
                     sighting_count: r.sighting_count,
+                    unique_vessels: r.unique_vessels,
+                    last_seen_at: r.last_seen_at.to_jiff(),
+                    last_vessel_name: r.last_vessel_name,
+                })
+            })
+            .collect()
+    }
+
+    /// Front page: sighted ducks that have gone the longest without a new
+    /// find — the "longest adrift" list (the missing page is this with a
+    /// one-year threshold).
+    pub async fn longest_since_sighting(&self, limit: i64) -> Result<Vec<DuckSummary>, RepoError> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT d.code, d.name,
+                   (SELECT COUNT(*) FROM sighting sc WHERE sc.duck_id = d.id) AS "sighting_count!",
+                   (SELECT COUNT(DISTINCT sv.vessel_id) FROM sighting sv WHERE sv.duck_id = d.id) AS "unique_vessels!",
+                   last.seen_at AS "last_seen_at!: jiff_sqlx::Timestamp",
+                   v.name AS "last_vessel_name!"
+            FROM duck d
+            JOIN LATERAL (
+                SELECT s.seen_at, s.vessel_id FROM sighting s
+                WHERE s.duck_id = d.id ORDER BY s.seen_at DESC LIMIT 1
+            ) last ON true
+            JOIN vessel v ON v.id = last.vessel_id
+            WHERE d.deleted_at IS NULL
+            ORDER BY last.seen_at ASC
+            LIMIT $1
+            "#,
+            limit,
+        )
+        .fetch_all(&self.0)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(DuckSummary {
+                    code: DuckCode::parse(&r.code)
+                        .map_err(|e| RepoError::corrupt("duck", format!("code: {e}")))?,
+                    name: r.name,
+                    sighting_count: r.sighting_count,
+                    unique_vessels: r.unique_vessels,
                     last_seen_at: r.last_seen_at.to_jiff(),
                     last_vessel_name: r.last_vessel_name,
                 })
@@ -540,6 +584,7 @@ impl DuckRepo {
             r#"
             SELECT d.code, d.name,
                    (SELECT COUNT(*) FROM sighting sc WHERE sc.duck_id = d.id) AS "sighting_count!",
+                   (SELECT COUNT(DISTINCT sv.vessel_id) FROM sighting sv WHERE sv.duck_id = d.id) AS "unique_vessels!",
                    last.seen_at AS "last_seen_at!: jiff_sqlx::Timestamp",
                    v.name AS "last_vessel_name!"
             FROM duck d
@@ -562,6 +607,7 @@ impl DuckRepo {
                         .map_err(|e| RepoError::corrupt("duck", format!("code: {e}")))?,
                     name: r.name,
                     sighting_count: r.sighting_count,
+                    unique_vessels: r.unique_vessels,
                     last_seen_at: r.last_seen_at.to_jiff(),
                     last_vessel_name: r.last_vessel_name,
                 })
@@ -688,6 +734,38 @@ impl SightingRepo {
                     has_photo: r.has_photo,
                     coordinates,
                     created_at: r.created_at.to_jiff(),
+                })
+            })
+            .collect()
+    }
+
+    /// Front page: the latest finds site-wide, newest first.
+    pub async fn recent(&self, limit: i64) -> Result<Vec<RecentFind>, RepoError> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT d.code AS duck_code, d.name AS duck_name, v.name AS vessel_name,
+                   u.display_name AS by_display_name,
+                   s.seen_at AS "seen_at: jiff_sqlx::Timestamp"
+            FROM sighting s
+            JOIN duck d ON d.id = s.duck_id AND d.deleted_at IS NULL
+            JOIN vessel v ON v.id = s.vessel_id
+            JOIN app_user u ON u.id = s.user_id
+            ORDER BY s.seen_at DESC
+            LIMIT $1
+            "#,
+            limit,
+        )
+        .fetch_all(&self.0)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(RecentFind {
+                    duck_code: DuckCode::parse(&r.duck_code)
+                        .map_err(|e| RepoError::corrupt("duck", format!("code: {e}")))?,
+                    duck_name: r.duck_name,
+                    vessel_name: r.vessel_name,
+                    by_display_name: r.by_display_name,
+                    seen_at: r.seen_at.to_jiff(),
                 })
             })
             .collect()

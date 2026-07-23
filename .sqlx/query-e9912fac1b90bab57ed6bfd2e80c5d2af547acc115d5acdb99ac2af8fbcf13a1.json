@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.code AS duck_code, d.name AS duck_name, v.name AS vessel_name,\n                   u.display_name AS by_display_name,\n                   s.seen_at AS \"seen_at: jiff_sqlx::Timestamp\"\n            FROM sighting s\n            JOIN duck d ON d.id = s.duck_id AND d.deleted_at IS NULL\n            JOIN vessel v ON v.id = s.vessel_id\n            JOIN app_user u ON u.id = s.user_id\n            ORDER BY s.seen_at DESC\n            LIMIT $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "duck_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "duck_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "vessel_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "by_display_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "seen_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e9912fac1b90bab57ed6bfd2e80c5d2af547acc115d5acdb99ac2af8fbcf13a1"
+}

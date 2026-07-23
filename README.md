@@ -53,7 +53,7 @@ read in development). The app fails fast at boot on missing required values.
 | `OIDC_<SLUG>_ISSUER` / `_CLIENT_ID` / `_SECRET` / `_DISPLAY_NAME` | no | — | **Any other OIDC provider** — Keycloak, Authentik, Authelia, Zitadel, Okta, …. Pick a slug; it becomes `/login/<slug>`. Display name defaults to the capitalized slug. |
 | `TRUST_PROXY_HEADERS` | no | `false` | Key rate limits on `X-Forwarded-For`-style headers. Set `true` **only** behind a trusted reverse proxy / load balancer; otherwise clients could spoof their IP. |
 | `ADMIN_IDENTITIES` | no | empty | Comma-separated `issuer\|subject` pairs granted admin on login. |
-| `CAP_FLOCKS_PER_USER`, `CAP_MINT_BATCH_MAX`, `CAP_UNORIGINATED_MAX`, `MISSING_AFTER_DAYS`, `FRONT_PAGE_LIMIT` | no | 10, 100, 200, 365, 20 | Product knobs. |
+| `CAP_FLOCKS_PER_USER`, `CAP_MINT_BATCH_MAX`, `CAP_UNORIGINATED_MAX`, `MISSING_AFTER_DAYS`, `FRONT_PAGE_LIMIT` | no | 10, 100, 200, 365, 10 | Product knobs. |
 
 At least one OIDC provider must be configured or nobody can log in. Any
 number can be active at once; the login page lists whatever is configured.

@@ -7,7 +7,7 @@ use jiff::Timestamp;
 use maud::{html, Markup, PreEscaped, DOCTYPE};
 use storage::{
     CommentView, DuckSummary, FlockDuckStatus, FollowedDuck, MySighting, NotificationView,
-    SightingView, VesselOption,
+    RecentFind, SightingView, VesselOption,
 };
 
 use crate::version::BuildInfo;
@@ -126,7 +126,7 @@ impl Page {
                 p class="muted" { "Nothing here yet." }
             } @else {
                 table {
-                    tr { th { "duck" } th { "last seen" } th { "aboard" } th { "finds" } }
+                    tr { th { "duck" } th { "last seen" } th { "aboard" } th { "finds" } th { "ships" } }
                     @for d in ducks {
                         tr {
                             td {
@@ -138,6 +138,7 @@ impl Page {
                             td { (When::ago(&d.last_seen_at)) }
                             td { (d.last_vessel_name) }
                             td { (d.sighting_count) }
+                            td { (d.unique_vessels) }
                         }
                     }
                 }
@@ -145,16 +146,56 @@ impl Page {
         }
     }
 
-    pub fn front(nav: &Nav, recent: &[DuckSummary], most: &[DuckSummary]) -> Markup {
+    fn finds_table(finds: &[RecentFind]) -> Markup {
+        html! {
+            @if finds.is_empty() {
+                p class="muted" { "No finds yet — the first one could be yours." }
+            } @else {
+                table {
+                    tr { th { "duck" } th { "aboard" } th { "when" } th { "found by" } }
+                    @for f in finds {
+                        tr {
+                            td {
+                                a class="code" href={ "/d/" (f.duck_code.as_str()) } {
+                                    (f.duck_code.display_grouped())
+                                }
+                                @if let Some(name) = &f.duck_name { " · " (name) }
+                            }
+                            td { (f.vessel_name) }
+                            td { (When::ago(&f.seen_at)) }
+                            td { (f.by_display_name.as_deref().unwrap_or("someone")) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn front(
+        nav: &Nav,
+        latest: &[RecentFind],
+        traveled: &[DuckSummary],
+        seen: &[DuckSummary],
+        adrift: &[DuckSummary],
+    ) -> Markup {
         Self::layout("home", nav, None, html! {
             p {
                 "Found a rubber duck with a QR code on a cruise? Scanning it leads here. "
                 "This is the registry of traveling ducks: where they started, where they've been."
             }
-            h2 { "Recently found" }
-            (Self::summary_table(recent))
+            h2 { "Latest finds" }
+            (Self::finds_table(latest))
             h2 { "Most traveled" }
-            (Self::summary_table(most))
+            p class="muted" { "The ducks that have seen the most distinct ships." }
+            (Self::summary_table(traveled))
+            h2 { "Most seen" }
+            p class="muted" { "The most-found ducks of all." }
+            (Self::summary_table(seen))
+            h2 { "Longest adrift" }
+            p class="muted" {
+                "Once seen, now quiet the longest. Keep an eye out — they're still out there."
+            }
+            (Self::summary_table(adrift))
             h2 { "Set your own ducks loose" }
             p class="muted" {
                 "Grab a flock of codes under " a href="/me/flocks" { "my flocks" }

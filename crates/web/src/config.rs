@@ -176,7 +176,7 @@ impl AppConfig {
                 mint_batch_max: cap("CAP_MINT_BATCH_MAX", 100) as u16,
                 unoriginated_max: cap("CAP_UNORIGINATED_MAX", 200),
                 missing_after_days: cap("MISSING_AFTER_DAYS", 365),
-                front_page_limit: cap("FRONT_PAGE_LIMIT", 20),
+                front_page_limit: cap("FRONT_PAGE_LIMIT", 10),
             },
             base_url,
         })

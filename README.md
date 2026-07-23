@@ -89,3 +89,7 @@ any query or migration:
 ```sh
 cargo sqlx prepare --workspace
 ```
+
+## License
+
+[AGPL-3.0-or-later](LICENSE).

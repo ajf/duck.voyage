@@ -87,6 +87,49 @@ impl AppleSecret {
 mod tests {
     use super::*;
 
+    /// Throwaway P-256 key in PKCS#8 PEM — the exact shape of an Apple
+    /// `.p8` download. Test fixture only; never used anywhere real.
+    const TEST_P8: &str = "-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg7v0myte0XmK6Qr6u
+EkawJ0ULujGePuhcwleJGDBmC8ShRANCAAShxltVHqiXRHJUzLtvCIjxT7b0pbiW
+8a/g4kWkQPCnhnXUfp0Na1GDegQzBTy1Kq82RKjreOsLSSHcmvnmbC2E
+-----END PRIVATE KEY-----
+";
+
+    /// Regression for the production panic: jsonwebtoken v10 ships no
+    /// crypto provider by default, so signing (not config parsing!) is the
+    /// first thing that fails. This exercises the full mint path with a
+    /// real-format key.
+    #[test]
+    fn mints_a_wellformed_es256_jwt_from_a_p8_key() {
+        let secret = AppleSecret {
+            team_id: "TESTTEAM01".into(),
+            key_id: "TESTKEY001".into(),
+            private_key_pem: TEST_P8.into(),
+        };
+        let jwt = secret.mint("voyage.duck.web").expect("minting succeeds");
+        assert_eq!(jwt.split('.').count(), 3, "compact JWS has three segments");
+        let header = {
+            use base64::Engine as _;
+            let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(jwt.split('.').next().unwrap())
+                .expect("header decodes");
+            String::from_utf8(raw).expect("header is utf8")
+        };
+        assert!(header.contains(r#""alg":"ES256""#), "header: {header}");
+        assert!(header.contains("TESTKEY001"), "kid present: {header}");
+    }
+
+    #[test]
+    fn rejects_garbage_keys() {
+        let secret = AppleSecret {
+            team_id: "TESTTEAM01".into(),
+            key_id: "TESTKEY001".into(),
+            private_key_pem: "not a pem".into(),
+        };
+        assert!(matches!(secret.mint("x"), Err(AuthError::AppleSecret(_))));
+    }
+
     #[test]
     fn parses_first_callback_user_payload() {
         let raw = r#"{"name":{"firstName":"Jane","lastName":"Mallard"},"email":"jane@example.com"}"#;

@@ -8,9 +8,14 @@ rust-version.workspace = true
 axum = "0.8.9"
 domain.workspace = true
 jiff.workspace = true
-jsonwebtoken = "10.4.0"
+# rust_crypto explicitly: v10 ships NO crypto provider by default and
+# panics at signing time unless exactly one is enabled.
+jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 openidconnect = { version = "4.0.1", features = ["reqwest"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1"
 thiserror.workspace = true
 tower-sessions = "0.14.0"
+
+[dev-dependencies]
+base64 = "0.22.1"

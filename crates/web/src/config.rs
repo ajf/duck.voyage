@@ -31,6 +31,11 @@ pub struct AppConfig {
     pub database_url: String,
     pub base_url: String,
     pub listen_addr: std::net::SocketAddr,
+    /// Key rate limits on `X-Forwarded-For`-style headers instead of the TCP
+    /// peer address. Opt-in: only correct when running behind a trusted
+    /// reverse proxy / load balancer; trusting these headers while directly
+    /// exposed lets clients spoof their IP.
+    pub trust_proxy_headers: bool,
     pub ff1_keys: Vec<(KeyGeneration, [u8; 32])>,
     pub current_generation: KeyGeneration,
     pub storage: StorageConfig,
@@ -139,9 +144,14 @@ impl AppConfig {
             },
         };
 
+        let trust_proxy_headers = optional("TRUST_PROXY_HEADERS")
+            .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+
         Ok(Self {
             database_url: required("DATABASE_URL")?,
             listen_addr,
+            trust_proxy_headers,
             ff1_keys,
             current_generation,
             storage,

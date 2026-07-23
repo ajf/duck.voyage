@@ -19,6 +19,7 @@ use tower::Layer;
 use domain::DuckCodec;
 use storage::{Db, PhotoStore};
 use tower_governor::governor::GovernorConfigBuilder;
+use tower_governor::key_extractor::SmartIpKeyExtractor;
 use tower_governor::GovernorLayer;
 use tower_http::trace::TraceLayer;
 use tower_sessions::cookie::time::Duration;
@@ -71,20 +72,9 @@ async fn main() -> anyhow::Result<()> {
     // Rate limits (§8): strict by IP where a bot can hammer pre-auth; a
     // looser general limit on mutations as backstop. DECISION: IP-keyed for
     // v1 — per-account velocity is the documented escalation, not the start.
-    let login_governor = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_second(2)
-            .burst_size(10)
-            .finish()
-            .expect("valid governor config"),
-    );
-    let mutation_governor = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_second(2)
-            .burst_size(30)
-            .finish()
-            .expect("valid governor config"),
-    );
+    // Behind a reverse proxy the peer address is the proxy, so
+    // TRUST_PROXY_HEADERS switches the key to forwarded-for-style headers.
+    let trust_proxy = config.trust_proxy_headers;
 
     let public_routes = Router::new()
         .route("/", get(handlers::public::front))
@@ -102,33 +92,42 @@ async fn main() -> anyhow::Result<()> {
             get(handlers::duck::sighting_photo),
         );
 
-    let login_routes = Router::new()
-        .route("/login/{provider}", get(handlers::auth_routes::begin))
-        .route(
-            "/auth/callback/{provider}",
-            get(handlers::auth_routes::callback_get).post(handlers::auth_routes::callback_post),
-        )
-        .layer(GovernorLayer::new(login_governor));
+    let login_routes = rate_limited(
+        Router::new()
+            .route("/login/{provider}", get(handlers::auth_routes::begin))
+            .route(
+                "/auth/callback/{provider}",
+                get(handlers::auth_routes::callback_get)
+                    .post(handlers::auth_routes::callback_post),
+            ),
+        2,
+        10,
+        trust_proxy,
+    );
 
-    let mutation_routes = Router::new()
-        .route("/logout", post(handlers::auth_routes::logout))
-        .route(
-            "/me/notifications/read",
-            post(handlers::me::mark_notifications_read),
-        )
-        .route("/flocks", post(handlers::flock::create))
-        .route("/flocks/{id}/ducks", post(handlers::flock::mint))
-        .route("/d/{code}/originate", post(handlers::duck::originate))
-        .route("/d/{code}/set-sail", post(handlers::duck::set_sail))
-        .route("/d/{code}/sightings", post(handlers::duck::log_sighting))
-        .route("/d/{code}/comments", post(handlers::duck::comment))
-        .route(
-            "/d/{code}/follow",
-            post(handlers::duck::follow).delete(handlers::duck::unfollow),
-        )
-        .route("/d/{code}/unfollow", post(handlers::duck::unfollow))
-        .layer(DefaultBodyLimit::max(PhotoPipeline::MAX_UPLOAD_BYTES + 64 * 1024))
-        .layer(GovernorLayer::new(mutation_governor));
+    let mutation_routes = rate_limited(
+        Router::new()
+            .route("/logout", post(handlers::auth_routes::logout))
+            .route(
+                "/me/notifications/read",
+                post(handlers::me::mark_notifications_read),
+            )
+            .route("/flocks", post(handlers::flock::create))
+            .route("/flocks/{id}/ducks", post(handlers::flock::mint))
+            .route("/d/{code}/originate", post(handlers::duck::originate))
+            .route("/d/{code}/set-sail", post(handlers::duck::set_sail))
+            .route("/d/{code}/sightings", post(handlers::duck::log_sighting))
+            .route("/d/{code}/comments", post(handlers::duck::comment))
+            .route(
+                "/d/{code}/follow",
+                post(handlers::duck::follow).delete(handlers::duck::unfollow),
+            )
+            .route("/d/{code}/unfollow", post(handlers::duck::unfollow))
+            .layer(DefaultBodyLimit::max(PhotoPipeline::MAX_UPLOAD_BYTES + 64 * 1024)),
+        2,
+        30,
+        trust_proxy,
+    );
 
     let router = Router::new()
         .merge(public_routes)
@@ -148,8 +147,52 @@ async fn main() -> anyhow::Result<()> {
         listener,
         ServiceExt::<Request>::into_make_service_with_connect_info::<SocketAddr>(app),
     )
+    .with_graceful_shutdown(shutdown_signal())
     .await?;
     Ok(())
+}
+
+/// Resolve on SIGTERM (how container platforms stop us) or ctrl-c, letting
+/// in-flight requests finish instead of eating a kill timeout.
+async fn shutdown_signal() {
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .expect("SIGTERM handler installs");
+    tokio::select! {
+        _ = sigterm.recv() => {}
+        _ = tokio::signal::ctrl_c() => {}
+    }
+    tracing::info!("shutdown signal received, draining");
+}
+
+/// Apply an IP-keyed rate limit to a route group. With `trust_proxy` the key
+/// comes from forwarded-for-style headers (correct behind a reverse proxy);
+/// otherwise from the TCP peer address.
+fn rate_limited(
+    router: Router<AppState>,
+    per_second: u64,
+    burst: u32,
+    trust_proxy: bool,
+) -> Router<AppState> {
+    if trust_proxy {
+        let config = Arc::new(
+            GovernorConfigBuilder::default()
+                .key_extractor(SmartIpKeyExtractor)
+                .per_second(per_second)
+                .burst_size(burst)
+                .finish()
+                .expect("valid governor config"),
+        );
+        router.layer(GovernorLayer::new(config))
+    } else {
+        let config = Arc::new(
+            GovernorConfigBuilder::default()
+                .per_second(per_second)
+                .burst_size(burst)
+                .finish()
+                .expect("valid governor config"),
+        );
+        router.layer(GovernorLayer::new(config))
+    }
 }
 
 /// QR labels encode `/D/CODE` (ALL CAPS keeps the QR in alphanumeric mode);

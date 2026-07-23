@@ -47,6 +47,7 @@ read in development). The app fails fast at boot on missing required values.
 | `OIDC_ENTRA_CLIENT_ID` / `_SECRET` / `_TENANT` | no | — | Microsoft Entra ID. |
 | `OIDC_APPLE_CLIENT_ID` / `_TEAM_ID` / `_KEY_ID` / `_PRIVATE_KEY` | no | — | Sign in with Apple (the client secret is minted at runtime from the key). |
 | `OIDC_<SLUG>_ISSUER` / `_CLIENT_ID` / `_SECRET` / `_DISPLAY_NAME` | no | — | **Any other OIDC provider** — Keycloak, Authentik, Authelia, Zitadel, Okta, …. Pick a slug; it becomes `/login/<slug>`. Display name defaults to the capitalized slug. |
+| `TRUST_PROXY_HEADERS` | no | `false` | Key rate limits on `X-Forwarded-For`-style headers. Set `true` **only** behind a trusted reverse proxy / load balancer; otherwise clients could spoof their IP. |
 | `ADMIN_IDENTITIES` | no | empty | Comma-separated `issuer\|subject` pairs granted admin on login. |
 | `CAP_FLOCKS_PER_USER`, `CAP_MINT_BATCH_MAX`, `CAP_UNORIGINATED_MAX`, `MISSING_AFTER_DAYS`, `FRONT_PAGE_LIMIT` | no | 10, 100, 200, 365, 20 | Product knobs. |
 
@@ -55,9 +56,11 @@ number can be active at once; the login page lists whatever is configured.
 
 ## Deployment (generic)
 
-The provided multi-stage `Dockerfile` builds a self-contained image
-(compile-time SQL checks use the committed `.sqlx` metadata, so no database
-is needed at build time). To run it you need:
+Prebuilt container images are published to **`ghcr.io/ajf/duck.voyage`** by
+CI: `latest` and `main` track the main branch, `vX.Y.Z` tags track releases.
+Building yourself works too — the multi-stage `Dockerfile` produces a
+self-contained image (compile-time SQL checks use the committed `.sqlx`
+metadata, so no database is needed at build time). To run it you need:
 
 1. **PostgreSQL** — reachable via `DATABASE_URL`. The app applies its own
    migrations at startup.
@@ -65,7 +68,8 @@ is needed at build time). To run it you need:
    default is fine for a single-node install (mount a volume at
    `STORAGE_LOCAL_PATH` so photos survive redeploys).
 3. **TLS termination** — run the container behind your reverse proxy /
-   load balancer of choice and set `BASE_URL` to the public `https://` URL.
+   load balancer of choice, set `BASE_URL` to the public `https://` URL, and
+   set `TRUST_PROXY_HEADERS=true` so rate limits see real client IPs.
 4. **Secrets** — inject the environment variables however your platform
    does secrets. Generate a fresh `DUCK_KEY_GEN_0` for production and treat
    it like a signing key: printed labels die with it.
@@ -76,9 +80,17 @@ work without configuration.
 
 ### Example: Fly.io
 
-`fly.toml` in the repo root is one worked example of the above (Fly
-Postgres or any managed Postgres, a Tigris bucket for `STORAGE_*`, secrets
-via `fly secrets set`). It is optional; delete it if you deploy elsewhere.
+Keep your `fly.toml` in your own (private) deploy repo — deployment config
+is yours, not the software's — and deploy the published image:
+
+```sh
+fly deploy -c fly.toml --image ghcr.io/ajf/duck.voyage:v0.1.0
+```
+
+A minimal `fly.toml`: `internal_port = 3000`, `force_https = true`, a
+`/healthz` HTTP check, and `TRUST_PROXY_HEADERS=true` plus
+`LISTEN_ADDR="[::]:3000"` in `[env]` (Fly's private network is IPv6).
+Secrets go through `fly secrets set`.
 
 ## After changing SQL
 

@@ -14,17 +14,17 @@ pub enum PhotoStoreError {
     Store(#[from] object_store::Error),
 }
 
-/// Photo blob storage behind `object_store`: MinIO locally, Tigris/S3 in
-/// prod, plain filesystem for tests — same interface. Keys are opaque and
-/// private; serving goes back through the app.
+/// Photo blob storage behind `object_store`: any S3-compatible store, or a
+/// plain directory on disk — same interface. Keys are opaque and private;
+/// serving goes back through the app.
 #[derive(Clone)]
 pub struct PhotoStore {
     store: Arc<dyn ObjectStore>,
 }
 
 impl PhotoStore {
-    /// S3-compatible backend (MinIO, Tigris). `allow_http` accommodates the
-    /// local MinIO endpoint.
+    /// S3-compatible backend (MinIO, AWS, …). `allow_http` accommodates
+    /// plain-HTTP endpoints like local MinIO.
     pub fn s3_compatible(
         endpoint: &str,
         bucket: &str,

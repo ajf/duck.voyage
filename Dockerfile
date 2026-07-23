@@ -1,6 +1,6 @@
-# Multi-stage build with cargo-chef for cached dependency layers
-# (duck-voyage.md §11). Build-time DB access is avoided via the committed
-# .sqlx offline metadata (SQLX_OFFLINE=true).
+# Multi-stage build with cargo-chef for cached dependency layers.
+# Build-time DB access is avoided via the committed .sqlx offline metadata
+# (SQLX_OFFLINE=true).
 
 FROM rust:1.97-bookworm AS chef
 RUN cargo install cargo-chef --locked

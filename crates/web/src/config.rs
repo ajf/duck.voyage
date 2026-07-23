@@ -46,7 +46,7 @@ pub struct AppConfig {
 }
 
 /// Where photos live. S3-compatible when `STORAGE_ENDPOINT` is set
-/// (MinIO, Tigris, AWS, …); otherwise a plain directory on disk — the
+/// (MinIO, AWS, …); otherwise a plain directory on disk — the
 /// zero-dependency default for small self-hosted installs.
 pub enum StorageConfig {
     S3 {

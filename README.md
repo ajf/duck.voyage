@@ -2,7 +2,7 @@
 
 A QR-scannable registry for rubber ducks planted on cruise ships. Each duck
 carries a printed code; scanning it shows the duck's story and lets finders
-log sightings. The full design rationale lives in `duck-voyage.md`.
+log sightings.
 
 This is self-hostable software, not a hosted service: it runs anywhere a
 container (or bare binary), a PostgreSQL database, and an OIDC login
@@ -41,7 +41,7 @@ read in development). The app fails fast at boot on missing required values.
 | `DUCK_KEY_CURRENT` | yes | — | Generation new flocks mint under. |
 | `LISTEN_ADDR` | no | `[::]:3000` | Listen address. The default is dual-stack (IPv6 + IPv4-mapped). Use e.g. `0.0.0.0:3000` on IPv6-less hosts. |
 | `PORT` | no | `3000` | Port shorthand when `LISTEN_ADDR` is unset. |
-| `STORAGE_ENDPOINT` / `_BUCKET` / `_ACCESS_KEY` / `_SECRET_KEY` | no | — | S3-compatible photo storage (MinIO, Tigris, AWS, …). |
+| `STORAGE_ENDPOINT` / `_BUCKET` / `_ACCESS_KEY` / `_SECRET_KEY` | no | — | Any S3-compatible photo storage (MinIO, AWS, …). |
 | `STORAGE_LOCAL_PATH` | no | `./photos` | Directory-on-disk photo storage, used when `STORAGE_ENDPOINT` is unset. |
 | `OIDC_GOOGLE_CLIENT_ID` / `_SECRET` | no | — | "Sign in with Google". |
 | `OIDC_ENTRA_CLIENT_ID` / `_SECRET` / `_TENANT` | no | — | Microsoft Entra ID. |
@@ -78,19 +78,9 @@ metadata, so no database is needed at build time). To run it you need:
 is dual-stack by default, so IPv6-native platforms and plain IPv4 hosts both
 work without configuration.
 
-### Example: Fly.io
-
-Keep your `fly.toml` in your own (private) deploy repo — deployment config
-is yours, not the software's — and deploy the published image:
-
-```sh
-fly deploy -c fly.toml --image ghcr.io/ajf/duck.voyage:v0.1.0
-```
-
-A minimal `fly.toml`: `internal_port = 3000`, `force_https = true`, a
-`/healthz` HTTP check, and `TRUST_PROXY_HEADERS=true` plus
-`LISTEN_ADDR="[::]:3000"` in `[env]` (Fly's private network is IPv6).
-Secrets go through `fly secrets set`.
+Keep platform-specific deployment config (compose files, manifests,
+platform TOML) in your own deploy repo referencing the published image —
+deployment config is yours, not the software's.
 
 ## After changing SQL
 

@@ -177,26 +177,45 @@ impl FlockRepo {
 pub struct DuckRepo(pub PgPool);
 
 impl DuckRepo {
-    /// Highest minted sequence number in a flock (0 when empty).
-    pub async fn max_seq(&self, flock: FlockId) -> Result<u16, RepoError> {
+    /// Mint the next `count` codes into a flock, atomically. The whole
+    /// operation — reading the high-water mark, computing codes via
+    /// `encode`, inserting — runs in one transaction holding a per-flock
+    /// advisory lock, so concurrent mints (multiple app instances included)
+    /// serialize instead of racing the UNIQUE constraints.
+    ///
+    /// `encode` maps a candidate seq to its code; returning `None` skips
+    /// that seq permanently (profanity filtering — holes are harmless).
+    pub async fn mint_batch(
+        &self,
+        flock: FlockId,
+        count: u16,
+        encode: impl Fn(FlockSeq) -> Option<DuckCode>,
+    ) -> Result<Vec<Duck>, RepoError> {
+        let mut tx = self.0.begin().await?;
+        // Two-int advisory key: (class 1 = mint, flock id). Released at
+        // commit/rollback.
+        sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+            .bind(1i32)
+            .bind(i32::try_from(flock.get()).expect("flock ids fit i32"))
+            .execute(&mut *tx)
+            .await?;
         let max = sqlx::query_scalar!(
             r#"SELECT COALESCE(MAX(flock_seq), 0) AS "max!" FROM duck WHERE flock_id = $1"#,
             flock.get(),
         )
-        .fetch_one(&self.0)
+        .fetch_one(&mut *tx)
         .await?;
-        Ok(u16::try_from(max).expect("flock_seq is CHECKed to 1..=10000"))
-    }
 
-    /// Insert a batch of freshly minted codes. The caller (web layer, which
-    /// holds the codec) computed the `(seq, code)` pairs; UNIQUE constraints
-    /// on `(flock_id, flock_seq)` and `code` backstop races — a conflict
-    /// surfaces as an `Sql` error and the caller retries the mint.
-    pub async fn mint(
-        &self,
-        flock: FlockId,
-        entries: &[(FlockSeq, DuckCode)],
-    ) -> Result<Vec<Duck>, RepoError> {
+        let mut entries: Vec<(FlockSeq, DuckCode)> = Vec::with_capacity(usize::from(count));
+        let mut candidate = u32::try_from(max).expect("flock_seq is CHECKed to 1..=10000") + 1;
+        while entries.len() < usize::from(count) {
+            let seq = FlockSeq::new(candidate).map_err(|_| RepoError::FlockFull)?;
+            if let Some(code) = encode(seq) {
+                entries.push((seq, code));
+            }
+            candidate += 1;
+        }
+
         let seqs: Vec<i16> = entries
             .iter()
             .map(|(s, _)| i16::try_from(s.get()).expect("seq <= 10000"))
@@ -218,8 +237,9 @@ impl DuckRepo {
             &seqs,
             &codes,
         )
-        .fetch_all(&self.0)
+        .fetch_all(&mut *tx)
         .await?;
+        tx.commit().await?;
         rows.into_iter().map(TryInto::try_into).collect()
     }
 

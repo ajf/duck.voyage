@@ -29,6 +29,9 @@ pub struct Caps {
 /// `DATABASE_URL`, `BASE_URL`, one FF1 key, and one OIDC provider.
 pub struct AppConfig {
     pub database_url: String,
+    /// Per-instance connection pool size. Size your Postgres for
+    /// `instances × this`.
+    pub database_max_connections: u32,
     pub base_url: String,
     pub listen_addr: std::net::SocketAddr,
     /// Key rate limits on `X-Forwarded-For`-style headers instead of the TCP
@@ -148,8 +151,19 @@ impl AppConfig {
             .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
             .unwrap_or(false);
 
+        let database_max_connections = optional("DATABASE_MAX_CONNECTIONS")
+            .map(|v| {
+                v.parse::<u32>().map_err(|e| ConfigError::Invalid {
+                    var: "DATABASE_MAX_CONNECTIONS".into(),
+                    detail: e.to_string(),
+                })
+            })
+            .transpose()?
+            .unwrap_or(10);
+
         Ok(Self {
             database_url: required("DATABASE_URL")?,
+            database_max_connections,
             listen_addr,
             trust_proxy_headers,
             ff1_keys,

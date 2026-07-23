@@ -66,29 +66,29 @@ pub async fn mint(
                 caps.unoriginated_max
             ))
         })?;
-    // Walk seqs from the high-water mark, skipping any whose encrypted code
-    // happens to spell something rude — the skipped seq is simply never
-    // minted (a hole in the sequence is harmless; scans of it 404).
-    let start = state.ducks().max_seq(flock.id).await? + 1;
-    let entries: Vec<(FlockSeq, domain::DuckCode)> = (u32::from(start)..)
-        .map(|raw| {
-            let seq = FlockSeq::new(raw).map_err(|_| {
-                WebError::BadRequest(format!("flock is full ({} codes max)", FlockSeq::MAX))
-            })?;
-            let code = state
+    // Fail fast on a key-configuration problem (the only way encoding can
+    // fail); inside the mint closure encoding is then infallible.
+    state
+        .codec()
+        .encode(flock.generation, &flock.code, FlockSeq::new(1).expect("1 is valid"))
+        .map_err(|e| WebError::BadRequest(e.to_string()))?;
+    // The mint itself is atomic in the repo (per-flock advisory lock), so
+    // concurrent mints — including from other instances — serialize. Codes
+    // that would spell something rude are skipped (a hole in the seq space
+    // is harmless; scans of it 404).
+    state
+        .ducks()
+        .mint_batch(flock.id, count, |seq| {
+            state
                 .codec()
                 .encode(flock.generation, &flock.code, seq)
-                .map_err(|e| WebError::BadRequest(e.to_string()))?;
-            Ok((seq, code))
+                .ok()
+                .filter(|code| !Profanity::matches(code.as_str()))
         })
-        .filter(|entry| {
-            entry
-                .as_ref()
-                .map(|(_, code)| !Profanity::matches(code.as_str()))
-                .unwrap_or(true)
-        })
-        .take(usize::from(count))
-        .collect::<Result<_, WebError>>()?;
-    state.ducks().mint(flock.id, &entries).await?;
+        .await
+        .map_err(|e| match e {
+            storage::RepoError::FlockFull => WebError::BadRequest(e.to_string()),
+            other => WebError::Repo(other),
+        })?;
     Ok(Redirect::to("/me/flocks?m=Codes+minted"))
 }

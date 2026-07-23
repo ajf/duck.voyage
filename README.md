@@ -36,6 +36,7 @@ read in development). The app fails fast at boot on missing required values.
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
 | `DATABASE_URL` | yes | — | PostgreSQL connection string. Migrations run automatically at startup. |
+| `DATABASE_MAX_CONNECTIONS` | no | `10` | Per-instance pool size; size Postgres for `instances × this`. |
 | `BASE_URL` | yes | — | Public URL of the instance. QR labels and OIDC redirect URIs derive from it; `https://` also turns on Secure cookies. |
 | `DUCK_KEY_GEN_0` (`_1`, …) | yes | — | FF1 code keys, 32 bytes hex each (`openssl rand -hex 32`). **Append-only forever**: printed codes are bound to their key generation. |
 | `DUCK_KEY_CURRENT` | yes | — | Generation new flocks mint under. |
@@ -77,6 +78,26 @@ metadata, so no database is needed at build time). To run it you need:
 `GET /healthz` is a cheap liveness endpoint for health checks. The listener
 is dual-stack by default, so IPv6-native platforms and plain IPv4 hosts both
 work without configuration.
+
+### Running multiple instances
+
+The app is stateless and safe to scale horizontally against one Postgres:
+sessions live in the database (log in on one instance, continue on another),
+startup migrations serialize via advisory locks (simultaneous cold starts
+are fine), and every mutation is either transactional, an atomic
+compare-and-set, or — for code minting — serialized per flock with a
+transaction-scoped advisory lock. Requirements and caveats:
+
+- **Identical configuration everywhere**, especially `DUCK_KEY_GEN_*` — the
+  code keys must match or instances would mint/decode differently.
+- **Shared photo storage**: use an S3 backend (or point
+  `STORAGE_LOCAL_PATH` at genuinely shared storage). A per-instance local
+  directory will scatter photos.
+- **Rate limits are per-instance, in-memory**: the effective ceiling is
+  `limit × instances`. They're an abuse backstop, not an SLA; if that ever
+  matters, enforce limits at your load balancer.
+- **Connection budget**: each instance opens up to
+  `DATABASE_MAX_CONNECTIONS` (default 10) Postgres connections.
 
 Keep platform-specific deployment config (compose files, manifests,
 platform TOML) in your own deploy repo referencing the published image —

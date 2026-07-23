@@ -23,7 +23,7 @@ use tower_governor::key_extractor::SmartIpKeyExtractor;
 use tower_governor::GovernorLayer;
 use tower_http::trace::TraceLayer;
 use tower_sessions::cookie::time::Duration;
-use tower_sessions::{Expiry, SessionManagerLayer};
+use tower_sessions::{ExpiredDeletion, Expiry, SessionManagerLayer};
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::config::AppConfig;
@@ -37,10 +37,19 @@ async fn main() -> anyhow::Result<()> {
 
     let config = AppConfig::from_env()?;
 
-    let db = Db::connect(&config.database_url).await?;
+    let db = Db::connect(&config.database_url, config.database_max_connections).await?;
     db.migrate().await?;
     let session_store = PostgresStore::new(db.pool().clone());
-    session_store.migrate().await?;
+    // tower-sessions' table creation has no internal lock, so serialize it
+    // across concurrently booting instances.
+    db.with_startup_lock(session_store.migrate()).await??;
+    // One expired-session sweep per instance; concurrent sweeps are harmless
+    // (plain DELETEs on expiry).
+    tokio::spawn(
+        session_store
+            .clone()
+            .continuously_delete_expired(std::time::Duration::from_secs(3600)),
+    );
 
     let codec = DuckCodec::new(config.ff1_keys.clone(), config.current_generation)?;
     let photos = match &config.storage {

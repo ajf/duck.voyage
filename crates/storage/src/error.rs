@@ -6,6 +6,9 @@ pub enum RepoError {
     /// database contains data the application could never have written.
     #[error("corrupt row in {table}: {detail}")]
     Corrupt { table: &'static str, detail: String },
+    /// A mint would exceed the flock's sequence ceiling.
+    #[error("flock is full ({max} codes)", max = domain::FlockSeq::MAX)]
+    FlockFull,
 }
 
 impl RepoError {

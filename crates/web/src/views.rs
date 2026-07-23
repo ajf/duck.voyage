@@ -10,6 +10,8 @@ use storage::{
     SightingView, VesselOption,
 };
 
+use crate::version::BuildInfo;
+
 const CSS: &str = r#"
 :root { color-scheme: light dark; }
 body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 760px;
@@ -32,6 +34,10 @@ img.photo { max-width: 100%; height: auto; border-radius: 4px; }
 .code { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
 .badge { background: #d33; color: #fff; border-radius: 999px; padding: 0 0.5em; font-size: 0.8rem; }
 .flash { background: #2a72; border: 1px solid #2a7; border-radius: 6px; padding: 0.5rem 1rem; margin: 0.8rem 0; }
+footer { margin-top: 4rem; padding-top: 0.8rem; border-top: 1px solid #8883;
+         font-size: 0.78rem; opacity: 0.55; display: flex; gap: 0.6rem;
+         justify-content: center; flex-wrap: wrap; }
+footer .code { letter-spacing: normal; }
 "#;
 
 /// What the chrome needs to know about the viewer.
@@ -83,6 +89,14 @@ impl Page {
                         div class="flash" { (message) }
                     }
                     main { (body) }
+                    footer {
+                        span { "duck-tracker" }
+                        span class="code" {
+                            (BuildInfo::VERSION)
+                            @if let Some(sha) = BuildInfo::distinct_sha() { " (" (sha) ")" }
+                        }
+                        a href="https://github.com/ajf/duck.voyage" hx-boost="false" { "source" }
+                    }
                 }
             }
         }

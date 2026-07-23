@@ -14,6 +14,11 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
+# Build provenance for the page footer: the build context has no .git, so
+# CI passes these through; local builds without them show "unknown".
+ARG GIT_DESCRIBE
+ARG GIT_SHA
+ENV DUCK_BUILD_VERSION=$GIT_DESCRIBE DUCK_GIT_SHA=$GIT_SHA
 ENV SQLX_OFFLINE=true
 RUN cargo build --release -p web
 

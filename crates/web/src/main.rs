@@ -6,6 +6,7 @@ mod handlers;
 mod photo_pipeline;
 mod qr;
 mod state;
+mod version;
 mod views;
 
 use std::net::SocketAddr;
@@ -151,7 +152,12 @@ async fn main() -> anyhow::Result<()> {
     let app = axum::middleware::map_request(uppercase_scan_path).layer(router);
 
     let listener = tokio::net::TcpListener::bind(config.listen_addr).await?;
-    tracing::info!("listening on http://{}", listener.local_addr()?);
+    tracing::info!(
+        version = version::BuildInfo::VERSION,
+        sha = version::BuildInfo::SHA,
+        "listening on http://{}",
+        listener.local_addr()?
+    );
     axum::serve(
         listener,
         ServiceExt::<Request>::into_make_service_with_connect_info::<SocketAddr>(app),

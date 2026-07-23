@@ -91,6 +91,13 @@ async fn callback(
     session: Session,
     params: CallbackParams,
 ) -> Result<Redirect, WebError> {
+    // Successful requests are otherwise silent; this receipt line makes
+    // "did the provider's callback arrive at all?" answerable from logs.
+    tracing::info!(
+        provider,
+        has_user_payload = params.user.is_some(),
+        "oidc callback received"
+    );
     let stored = state
         .oidc_flows()
         .take(&params.state)

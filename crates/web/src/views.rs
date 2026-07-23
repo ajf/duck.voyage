@@ -160,7 +160,10 @@ impl Page {
             p { "Log in to record finds, comment, and follow ducks." }
             @for p in providers {
                 p {
-                    a href={
+                    // hx-boost must stay off here: these links 303 to the
+                    // provider's site, and a boosted (AJAX) fetch dies on
+                    // CORS instead of navigating.
+                    a hx-boost="false" href={
                         "/login/" (p.slug)
                         @if let Some(rt) = return_to { "?return_to=" (rt) }
                     } {

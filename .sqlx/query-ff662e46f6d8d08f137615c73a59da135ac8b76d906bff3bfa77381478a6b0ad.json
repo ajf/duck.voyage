@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM notification USING duck d, flock f\n               WHERE notification.duck_id = d.id AND d.flock_id = f.id\n                 AND f.owner_user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ff662e46f6d8d08f137615c73a59da135ac8b76d906bff3bfa77381478a6b0ad"
+}

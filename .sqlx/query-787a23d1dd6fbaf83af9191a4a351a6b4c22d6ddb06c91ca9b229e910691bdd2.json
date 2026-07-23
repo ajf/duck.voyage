@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM app_user WHERE id = $1 AND is_admin = false",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "787a23d1dd6fbaf83af9191a4a351a6b4c22d6ddb06c91ca9b229e910691bdd2"
+}

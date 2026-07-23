@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sighting USING duck d, flock f\n               WHERE sighting.duck_id = d.id AND d.flock_id = f.id\n                 AND f.owner_user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dbfa6f54d2ff3400c5bfaf4da168338d08eccb84319ac4b68f8853f446fdad51"
+}

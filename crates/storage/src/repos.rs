@@ -15,8 +15,8 @@ use sqlx::PgPool;
 use crate::error::RepoError;
 use crate::rows::{DuckRow, FlockRow, SightingRow, UserRow, VesselRow};
 use crate::summaries::{
-    CommentView, DuckSummary, FlockDuckStatus, FollowedDuck, MySighting, NotificationView,
-    RecentFind, SightingView, VesselOption,
+    AdminFlockOverview, AdminUserOverview, CommentView, DuckSummary, FlockDuckStatus, FollowedDuck,
+    MySighting, NotificationView, RecentFind, SightingView, VesselOption,
 };
 
 pub struct UserRepo(pub PgPool);
@@ -1060,6 +1060,236 @@ impl OidcFlowRepo {
             nonce: r.nonce,
             return_to: r.return_to,
         }))
+    }
+}
+
+/// Admin-only queries and destructive operations. Deletions here are hard
+/// and cascading — the abuse-cleanup lever, distinct from the reversible
+/// per-duck soft delete.
+pub struct AdminRepo(pub PgPool);
+
+impl AdminRepo {
+    /// Every account with activity counts, ordered so the caller can group
+    /// by issuer.
+    pub async fn users(&self) -> Result<Vec<AdminUserOverview>, RepoError> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT u.id, u.issuer, u.subject, u.display_name, u.email, u.is_admin,
+                   u.created_at AS "created_at: jiff_sqlx::Timestamp",
+                   (SELECT COUNT(*) FROM flock f WHERE f.owner_user_id = u.id) AS "flocks!",
+                   (SELECT COUNT(*) FROM sighting s WHERE s.user_id = u.id) AS "sightings!",
+                   (SELECT COUNT(*) FROM duck_comment c WHERE c.user_id = u.id) AS "comments!"
+            FROM app_user u
+            ORDER BY u.issuer, u.created_at
+            "#
+        )
+        .fetch_all(&self.0)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| AdminUserOverview {
+                id: UserId::new(r.id),
+                issuer: r.issuer,
+                subject: r.subject,
+                display_name: r.display_name,
+                email: r.email,
+                is_admin: r.is_admin,
+                created_at: r.created_at.to_jiff(),
+                flocks: r.flocks,
+                sightings: r.sightings,
+                comments: r.comments,
+            })
+            .collect())
+    }
+
+    /// Every flock with owner and duck/sighting counts.
+    pub async fn flocks(&self) -> Result<Vec<AdminFlockOverview>, RepoError> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT f.id, f.flock_code, f.label, f.owner_user_id,
+                   u.display_name AS owner_name,
+                   f.created_at AS "created_at: jiff_sqlx::Timestamp",
+                   (SELECT COUNT(*) FROM duck d WHERE d.flock_id = f.id) AS "ducks!",
+                   (SELECT COUNT(*) FROM duck d WHERE d.flock_id = f.id
+                        AND d.set_sail_at IS NOT NULL AND d.deleted_at IS NULL) AS "sailing!",
+                   (SELECT COUNT(*) FROM sighting s JOIN duck d ON d.id = s.duck_id
+                        WHERE d.flock_id = f.id) AS "sightings!"
+            FROM flock f JOIN app_user u ON u.id = f.owner_user_id
+            ORDER BY f.created_at
+            "#
+        )
+        .fetch_all(&self.0)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(AdminFlockOverview {
+                    id: FlockId::new(r.id),
+                    code: FlockCode::parse(&r.flock_code)
+                        .map_err(|e| RepoError::corrupt("flock", format!("flock_code: {e}")))?,
+                    label: r.label,
+                    owner_id: UserId::new(r.owner_user_id),
+                    owner_name: r.owner_name,
+                    ducks: r.ducks,
+                    sailing: r.sailing,
+                    sightings: r.sightings,
+                    created_at: r.created_at.to_jiff(),
+                })
+            })
+            .collect()
+    }
+
+    /// Hard-delete a flock: its ducks, and everything hanging off them.
+    /// Returns the orphaned photo keys for object-store cleanup, or `None`
+    /// if the flock didn't exist.
+    pub async fn delete_flock(&self, flock: FlockId) -> Result<Option<Vec<String>>, RepoError> {
+        let mut tx = self.0.begin().await?;
+        let photo_keys = sqlx::query_scalar!(
+            r#"
+            SELECT s.photo_key AS "key!" FROM sighting s
+            JOIN duck d ON d.id = s.duck_id
+            WHERE d.flock_id = $1 AND s.photo_key IS NOT NULL
+            UNION ALL
+            SELECT d.origin_photo_key AS "key!" FROM duck d
+            WHERE d.flock_id = $1 AND d.origin_photo_key IS NOT NULL
+            "#,
+            flock.get(),
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+        sqlx::query!(
+            r#"DELETE FROM notification USING duck d
+               WHERE notification.duck_id = d.id AND d.flock_id = $1"#,
+            flock.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(
+            r#"DELETE FROM duck_follow USING duck d
+               WHERE duck_follow.duck_id = d.id AND d.flock_id = $1"#,
+            flock.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(
+            r#"DELETE FROM duck_comment USING duck d
+               WHERE duck_comment.duck_id = d.id AND d.flock_id = $1"#,
+            flock.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(
+            r#"DELETE FROM sighting USING duck d
+               WHERE sighting.duck_id = d.id AND d.flock_id = $1"#,
+            flock.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(r#"DELETE FROM duck WHERE flock_id = $1"#, flock.get())
+            .execute(&mut *tx)
+            .await?;
+        let deleted = sqlx::query!(r#"DELETE FROM flock WHERE id = $1"#, flock.get())
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok((deleted.rows_affected() > 0).then_some(photo_keys))
+    }
+
+    /// Hard-delete a user: their account, flocks, ducks, and every trace —
+    /// including other people's sightings/comments on their ducks. Refuses
+    /// to delete admins (demote in the database first). Returns orphaned
+    /// photo keys, or `None` if no deletable user matched.
+    pub async fn delete_user(&self, user: UserId) -> Result<Option<Vec<String>>, RepoError> {
+        let mut tx = self.0.begin().await?;
+        let photo_keys = sqlx::query_scalar!(
+            r#"
+            SELECT s.photo_key AS "key!" FROM sighting s
+            LEFT JOIN duck d ON d.id = s.duck_id
+            LEFT JOIN flock f ON f.id = d.flock_id
+            WHERE (s.user_id = $1 OR f.owner_user_id = $1) AND s.photo_key IS NOT NULL
+            UNION ALL
+            SELECT d.origin_photo_key AS "key!" FROM duck d
+            JOIN flock f ON f.id = d.flock_id
+            WHERE f.owner_user_id = $1 AND d.origin_photo_key IS NOT NULL
+            "#,
+            user.get(),
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+        // Their notifications; notifications about their sightings elsewhere;
+        // notifications about ducks in their flocks.
+        sqlx::query!(r#"DELETE FROM notification WHERE user_id = $1"#, user.get())
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query!(
+            r#"DELETE FROM notification USING sighting s
+               WHERE notification.sighting_id = s.id AND s.user_id = $1"#,
+            user.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(
+            r#"DELETE FROM notification USING duck d, flock f
+               WHERE notification.duck_id = d.id AND d.flock_id = f.id
+                 AND f.owner_user_id = $1"#,
+            user.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(r#"DELETE FROM duck_follow WHERE user_id = $1"#, user.get())
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query!(
+            r#"DELETE FROM duck_follow USING duck d, flock f
+               WHERE duck_follow.duck_id = d.id AND d.flock_id = f.id
+                 AND f.owner_user_id = $1"#,
+            user.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(r#"DELETE FROM duck_comment WHERE user_id = $1"#, user.get())
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query!(
+            r#"DELETE FROM duck_comment USING duck d, flock f
+               WHERE duck_comment.duck_id = d.id AND d.flock_id = f.id
+                 AND f.owner_user_id = $1"#,
+            user.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(r#"DELETE FROM sighting WHERE user_id = $1"#, user.get())
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query!(
+            r#"DELETE FROM sighting USING duck d, flock f
+               WHERE sighting.duck_id = d.id AND d.flock_id = f.id
+                 AND f.owner_user_id = $1"#,
+            user.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(
+            r#"DELETE FROM duck USING flock f
+               WHERE duck.flock_id = f.id AND f.owner_user_id = $1"#,
+            user.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!(r#"DELETE FROM flock WHERE owner_user_id = $1"#, user.get())
+            .execute(&mut *tx)
+            .await?;
+        let deleted = sqlx::query!(
+            r#"DELETE FROM app_user WHERE id = $1 AND is_admin = false"#,
+            user.get(),
+        )
+        .execute(&mut *tx)
+        .await?;
+        if deleted.rows_affected() == 0 {
+            // Nonexistent, or an admin — either way, nothing must happen.
+            return Ok(None);
+        }
+        tx.commit().await?;
+        Ok(Some(photo_keys))
     }
 }
 

@@ -96,6 +96,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/missing", get(handlers::public::missing))
         .route("/static/htmx.min.js", get(handlers::public::htmx_js))
         .route("/login", get(handlers::auth_routes::login_page))
+        .route("/admin", get(handlers::admin::overview))
         .route("/me", get(handlers::me::me))
         .route("/me/flocks", get(handlers::me::my_flocks))
         .route("/d/{code}", get(handlers::duck::page))
@@ -126,6 +127,8 @@ async fn main() -> anyhow::Result<()> {
                 "/me/notifications/read",
                 post(handlers::me::mark_notifications_read),
             )
+            .route("/admin/users/{id}/delete", post(handlers::admin::delete_user))
+            .route("/admin/flocks/{id}/delete", post(handlers::admin::delete_flock))
             .route("/flocks", post(handlers::flock::create))
             .route("/flocks/{id}/ducks", post(handlers::flock::mint))
             .route("/d/{code}/originate", post(handlers::duck::originate))

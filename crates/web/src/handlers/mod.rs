@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod auth_routes;
 pub mod duck;
 pub mod flock;
@@ -21,6 +22,7 @@ pub async fn nav(state: &AppState, user: Option<&AuthenticatedUser>) -> Result<N
         Some(user) => Ok(Nav {
             display_name: user.display_name.clone(),
             logged_in: true,
+            is_admin: user.is_admin,
             unread: state.notifications().unread_count(user.id).await?,
         }),
     }

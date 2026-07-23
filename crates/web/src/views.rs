@@ -62,12 +62,13 @@ pub struct DuckView<'a> {
 pub struct Nav {
     pub display_name: Option<String>,
     pub logged_in: bool,
+    pub is_admin: bool,
     pub unread: i64,
 }
 
 impl Nav {
     pub fn anonymous() -> Self {
-        Self { display_name: None, logged_in: false, unread: 0 }
+        Self { display_name: None, logged_in: false, is_admin: false, unread: 0 }
     }
 }
 
@@ -91,6 +92,7 @@ impl Page {
                         a href="/missing" { "missing ducks" }
                         span class="spacer" {}
                         @if nav.logged_in {
+                            @if nav.is_admin { a href="/admin" { "admin" } }
                             a href="/me/flocks" { "my flocks" }
                             a href="/me" {
                                 (nav.display_name.as_deref().unwrap_or("me"))
@@ -454,6 +456,85 @@ impl Page {
                 }
             } @else if comments.is_empty() {
                 p class="muted" { "No comments yet." }
+            }
+        })
+    }
+
+    pub fn admin(
+        nav: &Nav,
+        flash: Option<&str>,
+        providers: &[ProviderSummary],
+        users: &[storage::AdminUserOverview],
+        flocks: &[storage::AdminFlockOverview],
+    ) -> Markup {
+        Self::layout("admin", nav, flash, html! {
+            h2 { "Login providers configured" }
+            @if providers.is_empty() {
+                p class="muted" { "None — nobody can log in." }
+            } @else {
+                p {
+                    @for (i, p) in providers.iter().enumerate() {
+                        @if i > 0 { ", " }
+                        (p.display_name) " (" span class="code" { (p.slug) } ")"
+                    }
+                }
+            }
+
+            h2 { "Users" }
+            // Grouped by issuer; the query orders by issuer so runs are contiguous.
+            @for (i, u) in users.iter().enumerate() {
+                @if i == 0 || users[i - 1].issuer != u.issuer {
+                    h3 { span class="code" { (u.issuer) } }
+                }
+                div class="card" {
+                    strong { (u.display_name.as_deref().unwrap_or("(no name)")) }
+                    @if let Some(email) = &u.email { " · " (email) }
+                    @if u.is_admin { " · " span class="badge" { "admin" } }
+                    " · joined " (When::date(&u.created_at))
+                    p class="muted" {
+                        (u.flocks) " flock" @if u.flocks != 1 { "s" }
+                        " · " (u.sightings) " sighting" @if u.sightings != 1 { "s" }
+                        " · " (u.comments) " comment" @if u.comments != 1 { "s" }
+                        " · sub " span class="code" { (u.subject) }
+                    }
+                    @if u.is_admin {
+                        p class="muted" { "admins can't be deleted here — demote in the database first" }
+                    } @else {
+                        form class="inline" method="post"
+                             action={ "/admin/users/" (u.id.get()) "/delete" }
+                             onsubmit="return confirm('Delete this user AND all their flocks, ducks, sightings, comments, and photos? This cannot be undone.')" {
+                            button { "delete user + everything" }
+                        }
+                    }
+                }
+            }
+
+            h2 { "Flocks" }
+            @if flocks.is_empty() {
+                p class="muted" { "No flocks yet." }
+            } @else {
+                table {
+                    tr { th { "prefix" } th { "label" } th { "owner" } th { "ducks" }
+                         th { "sailing" } th { "finds" } th { "since" } th {} }
+                    @for f in flocks {
+                        tr {
+                            td { span class="code" { (f.code.as_str()) } }
+                            td { (f.label.as_deref().unwrap_or("—")) }
+                            td { (f.owner_name.as_deref().unwrap_or("(no name)")) }
+                            td { (f.ducks) }
+                            td { (f.sailing) }
+                            td { (f.sightings) }
+                            td { (When::date(&f.created_at)) }
+                            td {
+                                form class="inline" method="post"
+                                     action={ "/admin/flocks/" (f.id.get()) "/delete" }
+                                     onsubmit="return confirm('Delete this flock AND all its ducks, sightings, comments, and photos? This cannot be undone.')" {
+                                    button { "delete" }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         })
     }

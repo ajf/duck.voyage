@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM duck_follow USING duck d\n               WHERE duck_follow.duck_id = d.id AND d.flock_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cf89f189ac97991427e65c74f90ae1f471a2627b55a82540022d779f6a2c77f6"
+}

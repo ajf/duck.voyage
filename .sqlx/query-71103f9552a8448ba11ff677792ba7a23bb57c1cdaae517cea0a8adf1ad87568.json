@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM notification USING sighting s\n               WHERE notification.sighting_id = s.id AND s.user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "71103f9552a8448ba11ff677792ba7a23bb57c1cdaae517cea0a8adf1ad87568"
+}

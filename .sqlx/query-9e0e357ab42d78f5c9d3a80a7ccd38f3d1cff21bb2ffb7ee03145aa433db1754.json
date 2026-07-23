@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM duck WHERE flock_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9e0e357ab42d78f5c9d3a80a7ccd38f3d1cff21bb2ffb7ee03145aa433db1754"
+}

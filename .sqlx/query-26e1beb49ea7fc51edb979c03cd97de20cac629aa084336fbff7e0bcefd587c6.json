@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT u.id, u.issuer, u.subject, u.display_name, u.email, u.is_admin,\n                   u.created_at AS \"created_at: jiff_sqlx::Timestamp\",\n                   (SELECT COUNT(*) FROM flock f WHERE f.owner_user_id = u.id) AS \"flocks!\",\n                   (SELECT COUNT(*) FROM sighting s WHERE s.user_id = u.id) AS \"sightings!\",\n                   (SELECT COUNT(*) FROM duck_comment c WHERE c.user_id = u.id) AS \"comments!\"\n            FROM app_user u\n            ORDER BY u.issuer, u.created_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "issuer",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "subject",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "display_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_admin",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "flocks!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "sightings!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "comments!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "26e1beb49ea7fc51edb979c03cd97de20cac629aa084336fbff7e0bcefd587c6"
+}

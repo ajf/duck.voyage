@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT s.photo_key AS \"key!\" FROM sighting s\n            JOIN duck d ON d.id = s.duck_id\n            WHERE d.flock_id = $1 AND s.photo_key IS NOT NULL\n            UNION ALL\n            SELECT d.origin_photo_key AS \"key!\" FROM duck d\n            WHERE d.flock_id = $1 AND d.origin_photo_key IS NOT NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "da82e5c50c0fd84001c13127ba4663eb07a062b5191c90e2be20835cc58beb39"
+}

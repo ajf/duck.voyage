@@ -1,6 +1,8 @@
 //! Read models: shapes queried for display, distinct from the entities.
 
-use domain::{CommentId, Coordinates, Duck, DuckCode, SightingId, VesselId};
+use domain::{
+    CommentId, Coordinates, Duck, DuckCode, FlockCode, FlockId, SightingId, UserId, VesselId,
+};
 use jiff::Timestamp;
 
 /// A duck as it appears on the front page or the missing-ducks page: its
@@ -81,6 +83,35 @@ pub struct NotificationView {
     pub seen_at: Timestamp,
     pub created_at: Timestamp,
     pub unread: bool,
+}
+
+/// A user as the admin overview sees them: identity plus activity counts.
+#[derive(Debug, Clone)]
+pub struct AdminUserOverview {
+    pub id: UserId,
+    pub issuer: String,
+    pub subject: String,
+    pub display_name: Option<String>,
+    pub email: Option<String>,
+    pub is_admin: bool,
+    pub created_at: Timestamp,
+    pub flocks: i64,
+    pub sightings: i64,
+    pub comments: i64,
+}
+
+/// A flock as the admin overview sees it.
+#[derive(Debug, Clone)]
+pub struct AdminFlockOverview {
+    pub id: FlockId,
+    pub code: FlockCode,
+    pub label: Option<String>,
+    pub owner_id: UserId,
+    pub owner_name: Option<String>,
+    pub ducks: i64,
+    pub sailing: i64,
+    pub sightings: i64,
+    pub created_at: Timestamp,
 }
 
 /// An entry in the sighting form's vessel picker, carrying the current

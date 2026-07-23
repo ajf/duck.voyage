@@ -35,6 +35,22 @@ struct ProviderHandle {
     secret: SecretSource,
 }
 
+impl ProviderHandle {
+    /// Apple deviates from the common path in several ways (scopes, response
+    /// mode, token-endpoint auth, where the name arrives); everything checks
+    /// this rather than string-matching slugs.
+    fn is_apple(&self) -> bool {
+        matches!(self.secret, SecretSource::Apple(_))
+    }
+
+    /// Apple only accepts the literal scopes `name` and `email`; everyone
+    /// else speaks standard `profile` + `email`.
+    fn scopes(&self) -> Vec<Scope> {
+        let names: &[&str] = if self.is_apple() { &["name", "email"] } else { &["profile", "email"] };
+        names.iter().map(|s| Scope::new((*s).into())).collect()
+    }
+}
+
 /// What the login page needs to render a provider button.
 #[derive(Clone)]
 pub struct ProviderSummary {
@@ -147,12 +163,18 @@ impl OidcProviders {
             self.redirect_base, handle.slug
         ))
         .map_err(|e| AuthError::Config(e.to_string()))?;
-        Ok(CoreClient::from_provider_metadata(
+        let client = CoreClient::from_provider_metadata(
             handle.metadata.clone(),
             ClientId::new(handle.client_id.clone()),
             Some(ClientSecret::new(secret)),
         )
-        .set_redirect_uri(redirect))
+        .set_redirect_uri(redirect);
+        // Apple's token endpoint rejects HTTP Basic client auth; the secret
+        // must travel in the request body.
+        Ok(match handle.is_apple() {
+            true => client.set_auth_type(openidconnect::AuthType::RequestBody),
+            false => client,
+        })
     }
 
     /// Build the provider redirect URL and park the flow state in the session.
@@ -165,16 +187,23 @@ impl OidcProviders {
         let handle = self.handle(slug)?;
         let client = self.client(handle)?;
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-        let (auth_url, csrf, nonce) = client
+        let mut request = client
             .authorize_url(
                 CoreAuthenticationFlow::AuthorizationCode,
                 CsrfToken::new_random,
                 Nonce::new_random,
             )
-            .add_scope(Scope::new("profile".into()))
-            .add_scope(Scope::new("email".into()))
-            .set_pkce_challenge(pkce_challenge)
-            .url();
+            .set_pkce_challenge(pkce_challenge);
+        request = handle
+            .scopes()
+            .into_iter()
+            .fold(request, |req, scope| req.add_scope(scope));
+        if handle.is_apple() {
+            // Apple requires form_post whenever scopes are requested — the
+            // callback arrives as a POST (handled by the POST callback route).
+            request = request.add_extra_param("response_mode", "form_post");
+        }
+        let (auth_url, csrf, nonce) = request.url();
         session
             .insert(
                 FLOW_KEY,
@@ -193,12 +222,17 @@ impl OidcProviders {
     /// Handle the provider callback: check state, exchange the code (PKCE),
     /// verify the id_token (signature, iss, aud, nonce, expiry), and return
     /// the identity plus where the user wanted to go.
+    ///
+    /// `user_payload` is the raw `user` form field Apple includes on the
+    /// *first* authorization only — the sole source of the user's name for
+    /// Apple logins. Ignored (never trusted) for other providers.
     pub async fn complete(
         &self,
         slug: &str,
         session: &Session,
         code: &str,
         state: &str,
+        user_payload: Option<&str>,
     ) -> Result<(OidcIdentity, Option<String>), AuthError> {
         let flow: FlowState = session
             .remove(FLOW_KEY)
@@ -226,22 +260,33 @@ impl OidcProviders {
             .claims(&client.id_token_verifier(), &Nonce::new(flow.nonce))
             .map_err(|e| AuthError::IdToken(e.to_string()))?;
 
+        // Apple's name never appears in the id_token; it arrives once, in
+        // the first callback's `user` field.
+        let apple_user = handle
+            .is_apple()
+            .then(|| user_payload.and_then(crate::apple::AppleCallbackUser::parse))
+            .flatten();
         let display_name = claims
             .name()
             .and_then(|n| n.get(None))
             .map(|n| n.as_str().to_owned())
+            .or_else(|| apple_user.as_ref().and_then(|u| u.display_name()))
             .or_else(|| {
                 claims
                     .preferred_username()
                     .map(|u| u.as_str().to_owned())
             });
+        let email = claims
+            .email()
+            .map(|e| e.as_str().to_owned())
+            .or_else(|| apple_user.as_ref().and_then(|u| u.email().map(str::to_owned)));
         let identity = OidcIdentity {
             subject: OidcSubject::new(
                 claims.issuer().as_str().to_owned(),
                 claims.subject().as_str().to_owned(),
             ),
             display_name,
-            email: claims.email().map(|e| e.as_str().to_owned()),
+            email,
         };
         Ok((identity, flow.return_to))
     }

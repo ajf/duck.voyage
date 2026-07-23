@@ -50,6 +50,9 @@ pub async fn begin(
 pub struct CallbackParams {
     pub code: String,
     pub state: String,
+    /// Apple only: JSON blob with the user's name, present on the very
+    /// first authorization and never again.
+    pub user: Option<String>,
 }
 
 /// GET for every provider; Apple uses `response_mode=form_post`, hence the
@@ -80,7 +83,13 @@ async fn callback(
 ) -> Result<Redirect, WebError> {
     let (identity, return_to) = state
         .oidc()
-        .complete(&provider, &session, &params.code, &params.state)
+        .complete(
+            &provider,
+            &session,
+            &params.code,
+            &params.state,
+            params.user.as_deref(),
+        )
         .await?;
     let grant_admin =
         state.is_admin_identity(identity.subject.issuer(), identity.subject.subject());

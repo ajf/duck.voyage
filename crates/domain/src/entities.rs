@@ -51,7 +51,24 @@ pub struct Duck {
     pub flock_id: FlockId,
     pub seq: FlockSeq,
     pub lifecycle: DuckLifecycle,
+    /// Soft-deleted by owner/admin: publicly a 404, restorable from the
+    /// flock dashboard. Orthogonal to lifecycle — the row must survive so
+    /// the seq high-water mark stands and the code is never re-minted.
+    pub deleted_at: Option<Timestamp>,
+    /// Comments disabled by owner/admin (abuse mitigation). Existing
+    /// comments stay visible.
+    pub comments_locked_at: Option<Timestamp>,
     pub created_at: Timestamp,
+}
+
+impl Duck {
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_at.is_some()
+    }
+
+    pub fn comments_locked(&self) -> bool {
+        self.comments_locked_at.is_some()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE duck\n            SET set_sail_at = now()\n            WHERE id = $1 AND originated_at IS NOT NULL AND set_sail_at IS NULL\n            RETURNING id, code, flock_id, flock_seq, name, description,\n                      originated_at AS \"originated_at: jiff_sqlx::Timestamp\",\n                      set_sail_at AS \"set_sail_at: jiff_sqlx::Timestamp\",\n                      origin_photo_key, origin_photo_content_type,\n                      created_at AS \"created_at: jiff_sqlx::Timestamp\"\n            ",
+  "query": "\n            UPDATE duck\n            SET comments_locked_at = CASE WHEN $2 THEN COALESCE(comments_locked_at, now()) ELSE NULL END\n            WHERE id = $1\n            RETURNING id, code, flock_id, flock_seq, name, description,\n                      originated_at AS \"originated_at: jiff_sqlx::Timestamp\",\n                      set_sail_at AS \"set_sail_at: jiff_sqlx::Timestamp\",\n                      deleted_at AS \"deleted_at: jiff_sqlx::Timestamp\",\n                      comments_locked_at AS \"comments_locked_at: jiff_sqlx::Timestamp\",\n                      origin_photo_key, origin_photo_content_type,\n                      created_at AS \"created_at: jiff_sqlx::Timestamp\"\n            ",
   "describe": {
     "columns": [
       {
@@ -45,23 +45,34 @@
       },
       {
         "ordinal": 8,
+        "name": "deleted_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "comments_locked_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
         "name": "origin_photo_key",
         "type_info": "Text"
       },
       {
-        "ordinal": 9,
+        "ordinal": 11,
         "name": "origin_photo_content_type",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "created_at: jiff_sqlx::Timestamp",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Int8",
+        "Bool"
       ]
     },
     "nullable": [
@@ -75,8 +86,10 @@
       true,
       true,
       true,
+      true,
+      true,
       false
     ]
   },
-  "hash": "097876edbd0be8c1fbc8f5439ca3026f0ac3a821ba2b7b0cc320601e81a18e7f"
+  "hash": "d592be7dee982475e1b2eb9af7aaaedb22015b7cd5310e6bdae0b7e5f802996d"
 }

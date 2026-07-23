@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT d.code, d.name,\n                   (SELECT COUNT(*) FROM sighting sc WHERE sc.duck_id = d.id) AS \"sighting_count!\",\n                   last.seen_at AS \"last_seen_at!: jiff_sqlx::Timestamp\",\n                   v.name AS \"last_vessel_name!\"\n            FROM duck d\n            JOIN LATERAL (\n                SELECT s.seen_at, s.vessel_id FROM sighting s\n                WHERE s.duck_id = d.id ORDER BY s.seen_at DESC LIMIT 1\n            ) last ON true\n            JOIN vessel v ON v.id = last.vessel_id\n            WHERE last.seen_at < $1\n            ORDER BY last.seen_at ASC\n            ",
+  "query": "\n            SELECT d.code, d.name,\n                   (SELECT COUNT(*) FROM sighting sc WHERE sc.duck_id = d.id) AS \"sighting_count!\",\n                   last.seen_at AS \"last_seen_at!: jiff_sqlx::Timestamp\",\n                   v.name AS \"last_vessel_name!\"\n            FROM duck d\n            JOIN LATERAL (\n                SELECT s.seen_at, s.vessel_id FROM sighting s\n                WHERE s.duck_id = d.id ORDER BY s.seen_at DESC LIMIT 1\n            ) last ON true\n            JOIN vessel v ON v.id = last.vessel_id\n            WHERE last.seen_at < $1 AND d.deleted_at IS NULL\n            ORDER BY last.seen_at ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -42,5 +42,5 @@
       false
     ]
   },
-  "hash": "3ce18346b8b567b24058282228dbe0f6287d4ce2a2c74aa1665cf8b2d61b4853"
+  "hash": "3bad6e273fe19751725cbde33e9157cfea1ea49601525a8f5deb9fcc68e1dda0"
 }

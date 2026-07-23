@@ -137,6 +137,18 @@ async fn main() -> anyhow::Result<()> {
                 post(handlers::duck::follow).delete(handlers::duck::unfollow),
             )
             .route("/d/{code}/unfollow", post(handlers::duck::unfollow))
+            .route("/d/{code}/delete", post(handlers::duck::delete_duck))
+            .route("/d/{code}/restore", post(handlers::duck::restore_duck))
+            .route("/d/{code}/comments/lock", post(handlers::duck::lock_comments))
+            .route("/d/{code}/comments/unlock", post(handlers::duck::unlock_comments))
+            .route(
+                "/d/{code}/comments/{id}/delete",
+                post(handlers::duck::delete_comment),
+            )
+            .route(
+                "/d/{code}/sightings/{id}/delete",
+                post(handlers::duck::delete_sighting),
+            )
             .layer(DefaultBodyLimit::max(PhotoPipeline::MAX_UPLOAD_BYTES + 64 * 1024)),
         2,
         30,

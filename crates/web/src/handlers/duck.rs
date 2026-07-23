@@ -23,8 +23,15 @@ use crate::state::AppState;
 use crate::views::Page;
 
 /// Steps 1–4 of the validation funnel: parse, flock lookup, decode, existence
-/// check — every failure collapses into the same `NotFound`.
+/// check — every failure collapses into the same `NotFound`. Excludes
+/// soft-deleted ducks; moderation endpoints use [`resolve_any`].
 async fn resolve(state: &AppState, raw_code: &str) -> Result<(Duck, Flock), WebError> {
+    let (duck, flock) = resolve_any(state, raw_code).await?;
+    (!duck.is_deleted()).then_some(()).ok_or(WebError::NotFound)?;
+    Ok((duck, flock))
+}
+
+async fn resolve_any(state: &AppState, raw_code: &str) -> Result<(Duck, Flock), WebError> {
     let code = DuckCode::parse(raw_code).map_err(|_| WebError::NotFound)?;
     let flock = state
         .flocks()
@@ -53,6 +60,11 @@ fn is_owner(user: Option<&AuthenticatedUser>, flock: &Flock) -> bool {
     user.is_some_and(|u| u.id == flock.owner)
 }
 
+/// Moderation power: the flock owner or a site admin.
+fn can_moderate(user: &AuthenticatedUser, flock: &Flock) -> bool {
+    user.is_admin || user.id == flock.owner
+}
+
 pub async fn page(
     State(state): State<AppState>,
     Path(raw_code): Path<String>,
@@ -71,8 +83,6 @@ pub async fn page(
             .then(|| Page::staged(&nav, &duck.code, details).into_response())
             .ok_or(WebError::NotFound),
         DuckLifecycle::Sailing { details, since } => {
-            let (description, name) = (&details.description, &details.name);
-            let at = since;
             let sightings = state.sightings().for_duck(duck.id).await?;
             let comments = state.comments().for_duck(duck.id).await?;
             let vessels = state.vessels().options().await?;
@@ -83,15 +93,19 @@ pub async fn page(
             Ok(Page::duck(
                 &nav,
                 flash.m.as_deref(),
-                &duck.code,
-                name.as_ref().map(DuckName::as_str),
-                description.as_str(),
-                at,
-                is_owner(user.as_ref(), &flock),
-                is_following,
-                &sightings,
-                &comments,
-                &vessels,
+                crate::views::DuckView {
+                    code: &duck.code,
+                    name: details.name.as_ref().map(DuckName::as_str),
+                    description: details.description.as_str(),
+                    since,
+                    is_owner: is_owner(user.as_ref(), &flock),
+                    can_moderate: user.as_ref().is_some_and(|u| can_moderate(u, &flock)),
+                    is_following,
+                    comments_locked: duck.comments_locked(),
+                    sightings: &sightings,
+                    comments: &comments,
+                    vessels: &vessels,
+                },
             )
             .into_response())
         }
@@ -245,9 +259,106 @@ pub async fn comment(
     Form(form): Form<CommentForm>,
 ) -> Result<Redirect, WebError> {
     let (duck, _) = resolve_sailing(&state, &raw_code).await?;
+    (!duck.comments_locked())
+        .then_some(())
+        .ok_or_else(|| WebError::BadRequest("comments are closed on this duck".into()))?;
     let body = CommentBody::parse(&form.body)
         .map_err(|e| WebError::BadRequest(format!("comment: {e}")))?;
     state.comments().add(duck.id, user.id, &body).await?;
+    Ok(Redirect::to(&format!("/d/{}", duck.code.as_str())))
+}
+
+/// Moderation: soft-delete. Owner or admin; non-moderators get the uniform
+/// 404 rather than learning the duck exists.
+pub async fn delete_duck(
+    State(state): State<AppState>,
+    Path(raw_code): Path<String>,
+    user: AuthenticatedUser,
+) -> Result<Redirect, WebError> {
+    let (duck, flock) = resolve_any(&state, &raw_code).await?;
+    can_moderate(&user, &flock).then_some(()).ok_or(WebError::NotFound)?;
+    state.ducks().set_deleted(duck.id, true).await?;
+    Ok(match user.id == flock.owner {
+        true => Redirect::to("/me/flocks?m=Duck+deleted.+You+can+restore+it+here."),
+        false => Redirect::to("/?m=Duck+deleted"),
+    })
+}
+
+/// Moderation: restore a soft-deleted duck (from the flock dashboard).
+pub async fn restore_duck(
+    State(state): State<AppState>,
+    Path(raw_code): Path<String>,
+    user: AuthenticatedUser,
+) -> Result<Redirect, WebError> {
+    let (duck, flock) = resolve_any(&state, &raw_code).await?;
+    can_moderate(&user, &flock).then_some(()).ok_or(WebError::NotFound)?;
+    state.ducks().set_deleted(duck.id, false).await?;
+    Ok(Redirect::to("/me/flocks?m=Duck+restored"))
+}
+
+pub async fn lock_comments(
+    State(state): State<AppState>,
+    Path(raw_code): Path<String>,
+    user: AuthenticatedUser,
+) -> Result<Redirect, WebError> {
+    set_comments_locked(&state, &raw_code, &user, true).await
+}
+
+pub async fn unlock_comments(
+    State(state): State<AppState>,
+    Path(raw_code): Path<String>,
+    user: AuthenticatedUser,
+) -> Result<Redirect, WebError> {
+    set_comments_locked(&state, &raw_code, &user, false).await
+}
+
+async fn set_comments_locked(
+    state: &AppState,
+    raw_code: &str,
+    user: &AuthenticatedUser,
+    locked: bool,
+) -> Result<Redirect, WebError> {
+    let (duck, flock) = resolve(state, raw_code).await?;
+    can_moderate(user, &flock).then_some(()).ok_or(WebError::NotFound)?;
+    state.ducks().set_comments_locked(duck.id, locked).await?;
+    Ok(Redirect::to(&format!("/d/{}", duck.code.as_str())))
+}
+
+/// Moderation: remove a single comment.
+pub async fn delete_comment(
+    State(state): State<AppState>,
+    Path((raw_code, comment_id)): Path<(String, i64)>,
+    user: AuthenticatedUser,
+) -> Result<Redirect, WebError> {
+    let (duck, flock) = resolve_sailing(&state, &raw_code).await?;
+    can_moderate(&user, &flock).then_some(()).ok_or(WebError::NotFound)?;
+    state
+        .comments()
+        .delete(domain::CommentId::new(comment_id), duck.id)
+        .await?;
+    Ok(Redirect::to(&format!("/d/{}", duck.code.as_str())))
+}
+
+/// Moderation: remove a sighting and its photo — the lever for obscene or
+/// abusive uploads.
+pub async fn delete_sighting(
+    State(state): State<AppState>,
+    Path((raw_code, sighting_id)): Path<(String, i64)>,
+    user: AuthenticatedUser,
+) -> Result<Redirect, WebError> {
+    let (duck, flock) = resolve_sailing(&state, &raw_code).await?;
+    can_moderate(&user, &flock).then_some(()).ok_or(WebError::NotFound)?;
+    let deleted = state
+        .sightings()
+        .delete(SightingId::new(sighting_id), duck.id)
+        .await?;
+    if let Some(Some(photo_key)) = deleted {
+        // Best-effort: the row is gone (photo unreachable) even if the
+        // object lingers; log and move on rather than failing moderation.
+        if let Err(e) = state.photos().delete(&domain::PhotoKey::new(photo_key)).await {
+            tracing::warn!(error = %e, "orphaned sighting photo not removed from store");
+        }
+    }
     Ok(Redirect::to(&format!("/d/{}", duck.code.as_str())))
 }
 

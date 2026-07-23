@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM duck_comment WHERE id = $1 AND duck_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e025a2c2fa2da0a5928d996598b9aa3d9f48ff63d23afaf73962eb5953ebbf3e"
+}

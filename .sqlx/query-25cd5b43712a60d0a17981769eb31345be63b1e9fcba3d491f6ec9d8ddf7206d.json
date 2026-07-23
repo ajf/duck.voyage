@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT d.id, d.code, d.flock_id, d.flock_seq, d.name, d.description,\n                   d.originated_at AS \"originated_at: jiff_sqlx::Timestamp\",\n                   d.set_sail_at AS \"set_sail_at: jiff_sqlx::Timestamp\",\n                   d.origin_photo_key, d.origin_photo_content_type,\n                   d.created_at AS \"created_at: jiff_sqlx::Timestamp\",\n                   (SELECT COUNT(*) FROM sighting s WHERE s.duck_id = d.id) AS \"sighting_count!\"\n            FROM duck d WHERE d.flock_id = $1 ORDER BY d.flock_seq\n            ",
+  "query": "\n            UPDATE duck\n            SET originated_at = now(), description = $2, name = $3,\n                origin_photo_key = $4, origin_photo_content_type = $5\n            WHERE id = $1 AND originated_at IS NULL\n            RETURNING id, code, flock_id, flock_seq, name, description,\n                      originated_at AS \"originated_at: jiff_sqlx::Timestamp\",\n                      set_sail_at AS \"set_sail_at: jiff_sqlx::Timestamp\",\n                      deleted_at AS \"deleted_at: jiff_sqlx::Timestamp\",\n                      comments_locked_at AS \"comments_locked_at: jiff_sqlx::Timestamp\",\n                      origin_photo_key, origin_photo_content_type,\n                      created_at AS \"created_at: jiff_sqlx::Timestamp\"\n            ",
   "describe": {
     "columns": [
       {
@@ -45,28 +45,37 @@
       },
       {
         "ordinal": 8,
+        "name": "deleted_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "comments_locked_at: jiff_sqlx::Timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
         "name": "origin_photo_key",
         "type_info": "Text"
       },
       {
-        "ordinal": 9,
+        "ordinal": 11,
         "name": "origin_photo_content_type",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "created_at: jiff_sqlx::Timestamp",
         "type_info": "Timestamptz"
-      },
-      {
-        "ordinal": 11,
-        "name": "sighting_count!",
-        "type_info": "Int8"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -80,9 +89,10 @@
       true,
       true,
       true,
-      false,
-      null
+      true,
+      true,
+      false
     ]
   },
-  "hash": "b385c213526a2c23731fe4f8e4dac6c3e1797c6ee5dac1c9d003d2c0e5af2a6c"
+  "hash": "25cd5b43712a60d0a17981769eb31345be63b1e9fcba3d491f6ec9d8ddf7206d"
 }

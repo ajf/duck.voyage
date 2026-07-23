@@ -230,6 +230,8 @@ impl DuckRepo {
             RETURNING id, code, flock_id, flock_seq, name, description,
                       originated_at AS "originated_at: jiff_sqlx::Timestamp",
                       set_sail_at AS "set_sail_at: jiff_sqlx::Timestamp",
+                      deleted_at AS "deleted_at: jiff_sqlx::Timestamp",
+                      comments_locked_at AS "comments_locked_at: jiff_sqlx::Timestamp",
                       origin_photo_key, origin_photo_content_type,
                       created_at AS "created_at: jiff_sqlx::Timestamp"
             "#,
@@ -250,6 +252,8 @@ impl DuckRepo {
             SELECT id, code, flock_id, flock_seq, name, description,
                    originated_at AS "originated_at: jiff_sqlx::Timestamp",
                    set_sail_at AS "set_sail_at: jiff_sqlx::Timestamp",
+                   deleted_at AS "deleted_at: jiff_sqlx::Timestamp",
+                   comments_locked_at AS "comments_locked_at: jiff_sqlx::Timestamp",
                    origin_photo_key, origin_photo_content_type,
                    created_at AS "created_at: jiff_sqlx::Timestamp"
             FROM duck WHERE id = $1
@@ -274,6 +278,8 @@ impl DuckRepo {
             SELECT id, code, flock_id, flock_seq, name, description,
                    originated_at AS "originated_at: jiff_sqlx::Timestamp",
                    set_sail_at AS "set_sail_at: jiff_sqlx::Timestamp",
+                   deleted_at AS "deleted_at: jiff_sqlx::Timestamp",
+                   comments_locked_at AS "comments_locked_at: jiff_sqlx::Timestamp",
                    origin_photo_key, origin_photo_content_type,
                    created_at AS "created_at: jiff_sqlx::Timestamp"
             FROM duck WHERE flock_id = $1 AND flock_seq = $2
@@ -306,6 +312,8 @@ impl DuckRepo {
             RETURNING id, code, flock_id, flock_seq, name, description,
                       originated_at AS "originated_at: jiff_sqlx::Timestamp",
                       set_sail_at AS "set_sail_at: jiff_sqlx::Timestamp",
+                      deleted_at AS "deleted_at: jiff_sqlx::Timestamp",
+                      comments_locked_at AS "comments_locked_at: jiff_sqlx::Timestamp",
                       origin_photo_key, origin_photo_content_type,
                       created_at AS "created_at: jiff_sqlx::Timestamp"
             "#,
@@ -332,6 +340,8 @@ impl DuckRepo {
             RETURNING id, code, flock_id, flock_seq, name, description,
                       originated_at AS "originated_at: jiff_sqlx::Timestamp",
                       set_sail_at AS "set_sail_at: jiff_sqlx::Timestamp",
+                      deleted_at AS "deleted_at: jiff_sqlx::Timestamp",
+                      comments_locked_at AS "comments_locked_at: jiff_sqlx::Timestamp",
                       origin_photo_key, origin_photo_content_type,
                       created_at AS "created_at: jiff_sqlx::Timestamp"
             "#,
@@ -349,11 +359,64 @@ impl DuckRepo {
             SELECT COUNT(*) AS "count!"
             FROM duck d JOIN flock f ON f.id = d.flock_id
             WHERE f.owner_user_id = $1 AND d.originated_at IS NULL
+              AND d.deleted_at IS NULL
             "#,
             owner.get(),
         )
         .fetch_one(&self.0)
         .await?)
+    }
+
+    /// Soft-delete or restore. Returns the updated duck.
+    pub async fn set_deleted(&self, id: DuckId, deleted: bool) -> Result<Option<Duck>, RepoError> {
+        let row = sqlx::query_as!(
+            DuckRow,
+            r#"
+            UPDATE duck
+            SET deleted_at = CASE WHEN $2 THEN COALESCE(deleted_at, now()) ELSE NULL END
+            WHERE id = $1
+            RETURNING id, code, flock_id, flock_seq, name, description,
+                      originated_at AS "originated_at: jiff_sqlx::Timestamp",
+                      set_sail_at AS "set_sail_at: jiff_sqlx::Timestamp",
+                      deleted_at AS "deleted_at: jiff_sqlx::Timestamp",
+                      comments_locked_at AS "comments_locked_at: jiff_sqlx::Timestamp",
+                      origin_photo_key, origin_photo_content_type,
+                      created_at AS "created_at: jiff_sqlx::Timestamp"
+            "#,
+            id.get(),
+            deleted,
+        )
+        .fetch_optional(&self.0)
+        .await?;
+        row.map(TryInto::try_into).transpose()
+    }
+
+    /// Lock or unlock commenting. Returns the updated duck.
+    pub async fn set_comments_locked(
+        &self,
+        id: DuckId,
+        locked: bool,
+    ) -> Result<Option<Duck>, RepoError> {
+        let row = sqlx::query_as!(
+            DuckRow,
+            r#"
+            UPDATE duck
+            SET comments_locked_at = CASE WHEN $2 THEN COALESCE(comments_locked_at, now()) ELSE NULL END
+            WHERE id = $1
+            RETURNING id, code, flock_id, flock_seq, name, description,
+                      originated_at AS "originated_at: jiff_sqlx::Timestamp",
+                      set_sail_at AS "set_sail_at: jiff_sqlx::Timestamp",
+                      deleted_at AS "deleted_at: jiff_sqlx::Timestamp",
+                      comments_locked_at AS "comments_locked_at: jiff_sqlx::Timestamp",
+                      origin_photo_key, origin_photo_content_type,
+                      created_at AS "created_at: jiff_sqlx::Timestamp"
+            "#,
+            id.get(),
+            locked,
+        )
+        .fetch_optional(&self.0)
+        .await?;
+        row.map(TryInto::try_into).transpose()
     }
 
     /// Every duck in a flock with its sighting count — the flock dashboard.
@@ -363,6 +426,8 @@ impl DuckRepo {
             SELECT d.id, d.code, d.flock_id, d.flock_seq, d.name, d.description,
                    d.originated_at AS "originated_at: jiff_sqlx::Timestamp",
                    d.set_sail_at AS "set_sail_at: jiff_sqlx::Timestamp",
+                   d.deleted_at AS "deleted_at: jiff_sqlx::Timestamp",
+                   d.comments_locked_at AS "comments_locked_at: jiff_sqlx::Timestamp",
                    d.origin_photo_key, d.origin_photo_content_type,
                    d.created_at AS "created_at: jiff_sqlx::Timestamp",
                    (SELECT COUNT(*) FROM sighting s WHERE s.duck_id = d.id) AS "sighting_count!"
@@ -383,6 +448,8 @@ impl DuckRepo {
                     description: r.description,
                     originated_at: r.originated_at,
                     set_sail_at: r.set_sail_at,
+                    deleted_at: r.deleted_at,
+                    comments_locked_at: r.comments_locked_at,
                     origin_photo_key: r.origin_photo_key,
                     origin_photo_content_type: r.origin_photo_content_type,
                     created_at: r.created_at,
@@ -407,6 +474,7 @@ impl DuckRepo {
                 WHERE s.duck_id = d.id ORDER BY s.seen_at DESC LIMIT 1
             ) last ON true
             JOIN vessel v ON v.id = last.vessel_id
+            WHERE d.deleted_at IS NULL
             ORDER BY last.seen_at DESC
             LIMIT $1
             "#,
@@ -442,6 +510,7 @@ impl DuckRepo {
                 WHERE s.duck_id = d.id ORDER BY s.seen_at DESC LIMIT 1
             ) last ON true
             JOIN vessel v ON v.id = last.vessel_id
+            WHERE d.deleted_at IS NULL
             ORDER BY 3 DESC, last.seen_at DESC
             LIMIT $1
             "#,
@@ -479,7 +548,7 @@ impl DuckRepo {
                 WHERE s.duck_id = d.id ORDER BY s.seen_at DESC LIMIT 1
             ) last ON true
             JOIN vessel v ON v.id = last.vessel_id
-            WHERE last.seen_at < $1
+            WHERE last.seen_at < $1 AND d.deleted_at IS NULL
             ORDER BY last.seen_at ASC
             "#,
             cutoff.to_sqlx() as _,
@@ -624,6 +693,29 @@ impl SightingRepo {
             .collect()
     }
 
+    /// Moderation: remove a sighting and its notifications, returning the
+    /// photo key (if any) so the caller can clean up object storage.
+    /// Scoped to the duck so a forged id can't delete across ducks.
+    pub async fn delete(
+        &self,
+        sighting: SightingId,
+        duck: DuckId,
+    ) -> Result<Option<Option<String>>, RepoError> {
+        let mut tx = self.0.begin().await?;
+        sqlx::query!(r#"DELETE FROM notification WHERE sighting_id = $1"#, sighting.get())
+            .execute(&mut *tx)
+            .await?;
+        let row = sqlx::query!(
+            r#"DELETE FROM sighting WHERE id = $1 AND duck_id = $2 RETURNING photo_key"#,
+            sighting.get(),
+            duck.get(),
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(row.map(|r| r.photo_key))
+    }
+
     /// `/me`: everything this user has found.
     pub async fn for_user(&self, user: UserId) -> Result<Vec<MySighting>, RepoError> {
         let rows = sqlx::query!(
@@ -677,7 +769,7 @@ impl CommentRepo {
     pub async fn for_duck(&self, duck: DuckId) -> Result<Vec<CommentView>, RepoError> {
         let rows = sqlx::query!(
             r#"
-            SELECT c.body, c.created_at AS "created_at: jiff_sqlx::Timestamp",
+            SELECT c.id, c.body, c.created_at AS "created_at: jiff_sqlx::Timestamp",
                    u.display_name AS by_display_name
             FROM duck_comment c JOIN app_user u ON u.id = c.user_id
             WHERE c.duck_id = $1 ORDER BY c.created_at
@@ -689,11 +781,25 @@ impl CommentRepo {
         Ok(rows
             .into_iter()
             .map(|r| CommentView {
+                id: CommentId::new(r.id),
                 by_display_name: r.by_display_name,
                 body: r.body,
                 created_at: r.created_at.to_jiff(),
             })
             .collect())
+    }
+
+    /// Moderation: remove a comment. Scoped to the duck so a forged id
+    /// can't delete across ducks. Returns whether a row was removed.
+    pub async fn delete(&self, comment: CommentId, duck: DuckId) -> Result<bool, RepoError> {
+        let result = sqlx::query!(
+            r#"DELETE FROM duck_comment WHERE id = $1 AND duck_id = $2"#,
+            comment.get(),
+            duck.get(),
+        )
+        .execute(&self.0)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 }
 

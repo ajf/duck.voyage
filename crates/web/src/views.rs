@@ -40,6 +40,24 @@ footer { margin-top: 4rem; padding-top: 0.8rem; border-top: 1px solid #8883;
 footer .code { letter-spacing: normal; }
 "#;
 
+/// Everything the duck page renders. All fields are borrows/Copy, so the
+/// struct itself is Copy.
+#[derive(Clone, Copy)]
+pub struct DuckView<'a> {
+    pub code: &'a DuckCode,
+    pub name: Option<&'a str>,
+    pub description: &'a str,
+    pub since: &'a Timestamp,
+    pub is_owner: bool,
+    /// Flock owner or admin: sees delete/lock controls.
+    pub can_moderate: bool,
+    pub is_following: bool,
+    pub comments_locked: bool,
+    pub sightings: &'a [SightingView],
+    pub comments: &'a [CommentView],
+    pub vessels: &'a [VesselOption],
+}
+
 /// What the chrome needs to know about the viewer.
 pub struct Nav {
     pub display_name: Option<String>,
@@ -242,20 +260,20 @@ impl Page {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn duck(
-        nav: &Nav,
-        flash: Option<&str>,
-        code: &DuckCode,
-        name: Option<&str>,
-        description: &str,
-        originated_at: &Timestamp,
-        is_owner: bool,
-        is_following: bool,
-        sightings: &[SightingView],
-        comments: &[CommentView],
-        vessels: &[VesselOption],
-    ) -> Markup {
+    pub fn duck(nav: &Nav, flash: Option<&str>, view: DuckView) -> Markup {
+        let DuckView {
+            code,
+            name,
+            description,
+            since,
+            is_owner,
+            can_moderate,
+            is_following,
+            comments_locked,
+            sightings,
+            comments,
+            vessels,
+        } = view;
         let title = name.map(str::to_owned).unwrap_or_else(|| code.display_grouped());
         Self::layout(&title, nav, flash, html! {
             h2 {
@@ -266,7 +284,7 @@ impl Page {
                 alt="origin photo of this duck";
             p { (description) }
             p class="muted" {
-                "Traveling since " (When::date(originated_at))
+                "Traveling since " (When::date(since))
                 " · " (sightings.len()) " find" @if sightings.len() != 1 { "s" }
                 @if is_owner {
                     " · yours — "
@@ -278,6 +296,21 @@ impl Page {
                 form class="inline" method="post"
                      action={ "/d/" (code.as_str()) @if is_following { "/unfollow" } @else { "/follow" } } {
                     button { @if is_following { "unfollow" } @else { "follow this duck" } }
+                }
+            }
+            @if can_moderate {
+                div class="card" {
+                    span class="muted" { "moderation: " }
+                    form class="inline" method="post"
+                         action={ "/d/" (code.as_str()) "/comments/"
+                                  @if comments_locked { "unlock" } @else { "lock" } } {
+                        button { @if comments_locked { "unlock comments" } @else { "lock comments" } }
+                    }
+                    " "
+                    form class="inline" method="post" action={ "/d/" (code.as_str()) "/delete" }
+                         onsubmit="return confirm('Delete this duck? It disappears from the site; you can restore it from your flock page.')" {
+                        button { "delete duck" }
+                    }
                 }
             }
 
@@ -329,6 +362,14 @@ impl Page {
                     strong { (s.vessel_name) }
                     " · " (When::ago(&s.seen_at))
                     @if let Some(by) = &s.by_display_name { " · found by " (by) }
+                    @if can_moderate {
+                        " "
+                        form class="inline" method="post"
+                             action={ "/d/" (code.as_str()) "/sightings/" (s.id.get()) "/delete" }
+                             onsubmit="return confirm('Delete this sighting (and its photo)?')" {
+                            button { "✕" }
+                        }
+                    }
                     @if let Some(c) = &s.coordinates {
                         " · "
                         a href=(format!(
@@ -352,10 +393,20 @@ impl Page {
                         (c.by_display_name.as_deref().unwrap_or("someone"))
                         " · " (When::ago(&c.created_at))
                     }
+                    @if can_moderate {
+                        " "
+                        form class="inline" method="post"
+                             action={ "/d/" (code.as_str()) "/comments/" (c.id.get()) "/delete" }
+                             onsubmit="return confirm('Delete this comment?')" {
+                            button { "✕" }
+                        }
+                    }
                     p { (c.body) }
                 }
             }
-            @if nav.logged_in {
+            @if comments_locked {
+                p class="muted" { "Comments are closed on this duck." }
+            } @else if nav.logged_in {
                 form class="stack" method="post" action={ "/d/" (code.as_str()) "/comments" } {
                     textarea name="body" rows="2" required placeholder="Say something nice" {}
                     button { "Comment" }
@@ -482,24 +533,34 @@ impl Page {
                                         }
                                     }
                                     td {
-                                        @match &status.duck.lifecycle {
-                                            domain::DuckLifecycle::Allocated => {
-                                                a href={ "/d/" (status.duck.code.as_str()) } {
-                                                    "allocated — define it"
-                                                }
+                                        @if status.duck.is_deleted() {
+                                            "deleted — "
+                                            form class="inline" method="post"
+                                                 action={ "/d/" (status.duck.code.as_str()) "/restore" } {
+                                                button { "restore" }
                                             }
-                                            domain::DuckLifecycle::Staged(_) => {
-                                                a href={ "/d/" (status.duck.code.as_str()) } {
-                                                    "staged — ready to set sail"
+                                        } @else {
+                                            @match &status.duck.lifecycle {
+                                                domain::DuckLifecycle::Allocated => {
+                                                    a href={ "/d/" (status.duck.code.as_str()) } {
+                                                        "allocated — define it"
+                                                    }
                                                 }
+                                                domain::DuckLifecycle::Staged(_) => {
+                                                    a href={ "/d/" (status.duck.code.as_str()) } {
+                                                        "staged — ready to set sail"
+                                                    }
+                                                }
+                                                domain::DuckLifecycle::Sailing { .. } => { "⛵ sailing" }
                                             }
-                                            domain::DuckLifecycle::Sailing { .. } => { "⛵ sailing" }
                                         }
                                     }
                                     td { (status.sighting_count) }
                                     td {
-                                        a href={ "/d/" (status.duck.code.as_str()) "/qr.png" }
-                                          hx-boost="false" { "QR" }
+                                        @if !status.duck.is_deleted() {
+                                            a href={ "/d/" (status.duck.code.as_str()) "/qr.png" }
+                                              hx-boost="false" { "QR" }
+                                        }
                                     }
                                 }
                             }

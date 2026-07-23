@@ -73,4 +73,13 @@ impl PhotoStore {
             .bytes()
             .await?)
     }
+
+    /// Remove a photo (moderation). Missing objects are fine — the goal is
+    /// absence.
+    pub async fn delete(&self, key: &PhotoKey) -> Result<(), PhotoStoreError> {
+        match self.store.delete(&ObjectPath::from(key.as_str())).await {
+            Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
 }

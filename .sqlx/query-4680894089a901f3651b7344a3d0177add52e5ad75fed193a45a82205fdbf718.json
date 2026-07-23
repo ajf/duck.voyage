@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sighting WHERE id = $1 AND duck_id = $2 RETURNING photo_key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "photo_key",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "4680894089a901f3651b7344a3d0177add52e5ad75fed193a45a82205fdbf718"
+}

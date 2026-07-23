@@ -1,6 +1,6 @@
 //! Read models: shapes queried for display, distinct from the entities.
 
-use domain::{Coordinates, Duck, DuckCode, SightingId, VesselId};
+use domain::{CommentId, Coordinates, Duck, DuckCode, SightingId, VesselId};
 use jiff::Timestamp;
 
 /// A duck as it appears on the front page or the missing-ducks page: its
@@ -30,6 +30,7 @@ pub struct SightingView {
 /// One row of a duck page's comment thread.
 #[derive(Debug, Clone)]
 pub struct CommentView {
+    pub id: CommentId,
     pub by_display_name: Option<String>,
     pub body: String,
     pub created_at: Timestamp,

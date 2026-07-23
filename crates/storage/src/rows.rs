@@ -21,6 +21,8 @@ pub(crate) struct DuckRow {
     pub description: Option<String>,
     pub originated_at: Option<SqlTimestamp>,
     pub set_sail_at: Option<SqlTimestamp>,
+    pub deleted_at: Option<SqlTimestamp>,
+    pub comments_locked_at: Option<SqlTimestamp>,
     pub origin_photo_key: Option<String>,
     pub origin_photo_content_type: Option<String>,
     pub created_at: SqlTimestamp,
@@ -64,6 +66,8 @@ impl TryFrom<DuckRow> for Duck {
             seq: FlockSeq::new(u32::try_from(r.flock_seq).unwrap_or(0))
                 .map_err(|e| corrupt(format!("flock_seq: {e}")))?,
             lifecycle,
+            deleted_at: r.deleted_at.map(|t| t.to_jiff()),
+            comments_locked_at: r.comments_locked_at.map(|t| t.to_jiff()),
             created_at: r.created_at.to_jiff(),
         })
     }

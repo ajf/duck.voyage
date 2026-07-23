@@ -16,8 +16,8 @@ pub use sqlx::PgPool;
 pub use error::RepoError;
 pub use photos::{PhotoStore, PhotoStoreError};
 pub use repos::{
-    CommentRepo, DuckRepo, FlockRepo, FollowRepo, NewSighting, NotificationRepo, SightingRepo,
-    UserRepo, VesselRepo,
+    CommentRepo, DuckRepo, FlockRepo, FollowRepo, NewSighting, NotificationRepo, OidcFlowRepo,
+    SightingRepo, StoredLoginFlow, UserRepo, VesselRepo,
 };
 pub use summaries::{
     CommentView, DuckSummary, FlockDuckStatus, FollowedDuck, MySighting, NotificationView,

@@ -75,8 +75,12 @@ async fn main() -> anyhow::Result<()> {
         config.admin_identities,
     );
 
+    // Lax, explicitly: OIDC returns are cross-site navigations, and the
+    // post-login redirect chain must carry the fresh session cookie. Lax
+    // still blocks cross-site POSTs, which is our CSRF backstop.
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(secure_cookies)
+        .with_same_site(tower_sessions::cookie::SameSite::Lax)
         .with_expiry(Expiry::OnInactivity(Duration::days(30)));
 
     // Rate limits (§8): strict by IP where a bot can hammer pre-auth; a

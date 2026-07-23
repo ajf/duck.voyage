@@ -9,5 +9,7 @@ mod session;
 
 pub use apple::AppleSecret;
 pub use error::AuthError;
-pub use providers::{OidcIdentity, OidcProviderConfig, OidcProviders, ProviderSummary, SecretSource};
+pub use providers::{
+    LoginFlow, OidcIdentity, OidcProviderConfig, OidcProviders, ProviderSummary, SecretSource,
+};
 pub use session::{AdminUser, AuthenticatedUser, SessionUser};

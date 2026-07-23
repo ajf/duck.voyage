@@ -821,6 +821,64 @@ impl NotificationRepo {
     }
 }
 
+/// An in-flight OIDC login flow parked between the redirect to the provider
+/// and its callback. Keyed by the unguessable `state` token so retrieval
+/// works without cookies (Apple's form_post callback carries none).
+pub struct StoredLoginFlow {
+    pub state: String,
+    pub provider: String,
+    pub pkce_verifier: String,
+    pub nonce: String,
+    pub return_to: Option<String>,
+}
+
+pub struct OidcFlowRepo(pub PgPool);
+
+impl OidcFlowRepo {
+    /// Park a flow, opportunistically sweeping expired ones.
+    pub async fn put(&self, flow: &StoredLoginFlow) -> Result<(), RepoError> {
+        sqlx::query!(r#"DELETE FROM oidc_flow WHERE created_at < now() - interval '15 minutes'"#)
+            .execute(&self.0)
+            .await?;
+        sqlx::query!(
+            r#"
+            INSERT INTO oidc_flow (state, provider, pkce_verifier, nonce, return_to)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+            flow.state,
+            flow.provider,
+            flow.pkce_verifier,
+            flow.nonce,
+            flow.return_to.as_deref(),
+        )
+        .execute(&self.0)
+        .await?;
+        Ok(())
+    }
+
+    /// Retrieve-and-delete: each flow completes at most once, and stale
+    /// flows are as good as absent.
+    pub async fn take(&self, state: &str) -> Result<Option<StoredLoginFlow>, RepoError> {
+        let row = sqlx::query!(
+            r#"
+            DELETE FROM oidc_flow
+            WHERE state = $1 AND created_at > now() - interval '15 minutes'
+            RETURNING state, provider, pkce_verifier, nonce, return_to
+            "#,
+            state,
+        )
+        .fetch_optional(&self.0)
+        .await?;
+        Ok(row.map(|r| StoredLoginFlow {
+            state: r.state,
+            provider: r.provider,
+            pkce_verifier: r.pkce_verifier,
+            nonce: r.nonce,
+            return_to: r.return_to,
+        }))
+    }
+}
+
 pub struct VesselRepo(pub PgPool);
 
 impl VesselRepo {

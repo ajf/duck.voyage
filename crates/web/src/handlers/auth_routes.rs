@@ -37,11 +37,21 @@ pub async fn begin(
     State(state): State<AppState>,
     Path(provider): Path<String>,
     Query(params): Query<ReturnTo>,
-    session: Session,
 ) -> Result<Redirect, WebError> {
-    let url = state
+    let (url, flow) = state
         .oidc()
-        .begin(&provider, &session, safe_return_to(params.return_to))
+        .begin(&provider, safe_return_to(params.return_to))?;
+    // Parked in the database, keyed by the state token: Apple's form_post
+    // callback arrives without cookies, so the session can't carry this.
+    state
+        .oidc_flows()
+        .put(&storage::StoredLoginFlow {
+            state: flow.state,
+            provider: flow.provider,
+            pkce_verifier: flow.pkce_verifier,
+            nonce: flow.nonce,
+            return_to: flow.return_to,
+        })
         .await?;
     Ok(Redirect::to(url.as_str()))
 }
@@ -81,13 +91,24 @@ async fn callback(
     session: Session,
     params: CallbackParams,
 ) -> Result<Redirect, WebError> {
-    let (identity, return_to) = state
+    let stored = state
+        .oidc_flows()
+        .take(&params.state)
+        .await?
+        .ok_or(auth::AuthError::UnknownFlow)?;
+    let return_to = stored.return_to.clone();
+    let identity = state
         .oidc()
         .complete(
             &provider,
-            &session,
+            auth::LoginFlow {
+                state: stored.state,
+                provider: stored.provider,
+                pkce_verifier: stored.pkce_verifier,
+                nonce: stored.nonce,
+                return_to: stored.return_to,
+            },
             &params.code,
-            &params.state,
             params.user.as_deref(),
         )
         .await?;

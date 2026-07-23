@@ -30,6 +30,16 @@ impl IntoResponse for WebError {
             )
                 .into_response(),
             Self::BadRequest(detail) => (StatusCode::BAD_REQUEST, detail).into_response(),
+            // Expired/replayed/forged login callbacks are a client condition:
+            // send them around again rather than alarming anyone with a 500.
+            Self::Auth(auth::AuthError::UnknownFlow | auth::AuthError::StateMismatch) => (
+                StatusCode::BAD_REQUEST,
+                crate::views::error_page(
+                    "login expired",
+                    "That login attempt expired or was already used. Please log in again.",
+                ),
+            )
+                .into_response(),
             other => {
                 tracing::error!(error = %other, "internal error");
                 (

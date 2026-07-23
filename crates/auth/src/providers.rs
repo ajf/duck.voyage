@@ -4,7 +4,6 @@ use openidconnect::{
     AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, PkceCodeChallenge,
     PkceCodeVerifier, RedirectUrl, Scope,
 };
-use tower_sessions::Session;
 
 use crate::apple::AppleSecret;
 use crate::error::AuthError;
@@ -65,21 +64,23 @@ pub struct OidcIdentity {
     pub email: Option<String>,
 }
 
-/// The login-flow state parked in the session between redirect and callback.
-#[derive(serde::Serialize, serde::Deserialize)]
-struct FlowState {
-    provider: String,
-    pkce_verifier: String,
-    csrf: String,
-    nonce: String,
-    return_to: Option<String>,
+/// The interim state of one login: minted at `begin`, consumed at
+/// `complete`. The caller persists it keyed by `state` — **not** in the
+/// session, because Apple's form_post callback is a cross-site POST that
+/// arrives without cookies. Possession of the unguessable `state` token is
+/// the retrieval credential.
+pub struct LoginFlow {
+    /// The OIDC `state` parameter (a CSRF token) — the storage key.
+    pub state: String,
+    pub provider: String,
+    pub pkce_verifier: String,
+    pub nonce: String,
+    pub return_to: Option<String>,
 }
 
-const FLOW_KEY: &str = "oidc_flow";
-
 /// All configured providers, discovered once at boot. Login begins with a
-/// redirect to the provider and completes on the callback; the interim state
-/// (PKCE verifier, CSRF token, nonce) lives in the server-side session.
+/// redirect to the provider and completes on the callback; the interim
+/// [`LoginFlow`] is persisted by the caller between the two.
 pub struct OidcProviders {
     providers: Vec<ProviderHandle>,
     redirect_base: String,
@@ -177,13 +178,13 @@ impl OidcProviders {
         })
     }
 
-    /// Build the provider redirect URL and park the flow state in the session.
-    pub async fn begin(
+    /// Build the provider redirect URL and the flow state the caller must
+    /// persist until the callback.
+    pub fn begin(
         &self,
         slug: &str,
-        session: &Session,
         return_to: Option<String>,
-    ) -> Result<openidconnect::url::Url, AuthError> {
+    ) -> Result<(openidconnect::url::Url, LoginFlow), AuthError> {
         let handle = self.handle(slug)?;
         let client = self.client(handle)?;
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -204,24 +205,23 @@ impl OidcProviders {
             request = request.add_extra_param("response_mode", "form_post");
         }
         let (auth_url, csrf, nonce) = request.url();
-        session
-            .insert(
-                FLOW_KEY,
-                FlowState {
-                    provider: slug.to_owned(),
-                    pkce_verifier: pkce_verifier.secret().clone(),
-                    csrf: csrf.secret().clone(),
-                    nonce: nonce.secret().clone(),
-                    return_to,
-                },
-            )
-            .await?;
-        Ok(auth_url)
+        Ok((
+            auth_url,
+            LoginFlow {
+                state: csrf.secret().clone(),
+                provider: slug.to_owned(),
+                pkce_verifier: pkce_verifier.secret().clone(),
+                nonce: nonce.secret().clone(),
+                return_to,
+            },
+        ))
     }
 
-    /// Handle the provider callback: check state, exchange the code (PKCE),
-    /// verify the id_token (signature, iss, aud, nonce, expiry), and return
-    /// the identity plus where the user wanted to go.
+    /// Handle the provider callback: exchange the code (PKCE), verify the
+    /// id_token (signature, iss, aud, nonce, expiry), and return the
+    /// identity. The caller retrieved `flow` by the callback's `state`
+    /// parameter, which already proves state integrity; the provider match
+    /// is re-checked here.
     ///
     /// `user_payload` is the raw `user` form field Apple includes on the
     /// *first* authorization only — the sole source of the user's name for
@@ -229,16 +229,11 @@ impl OidcProviders {
     pub async fn complete(
         &self,
         slug: &str,
-        session: &Session,
+        flow: LoginFlow,
         code: &str,
-        state: &str,
         user_payload: Option<&str>,
-    ) -> Result<(OidcIdentity, Option<String>), AuthError> {
-        let flow: FlowState = session
-            .remove(FLOW_KEY)
-            .await?
-            .ok_or(AuthError::NoFlowInSession)?;
-        (flow.provider == slug && flow.csrf == state)
+    ) -> Result<OidcIdentity, AuthError> {
+        (flow.provider == slug)
             .then_some(())
             .ok_or(AuthError::StateMismatch)?;
 
@@ -280,14 +275,13 @@ impl OidcProviders {
             .email()
             .map(|e| e.as_str().to_owned())
             .or_else(|| apple_user.as_ref().and_then(|u| u.email().map(str::to_owned)));
-        let identity = OidcIdentity {
+        Ok(OidcIdentity {
             subject: OidcSubject::new(
                 claims.issuer().as_str().to_owned(),
                 claims.subject().as_str().to_owned(),
             ),
             display_name,
             email,
-        };
-        Ok((identity, flow.return_to))
+        })
     }
 }

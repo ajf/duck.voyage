@@ -3,8 +3,8 @@ use std::sync::Arc;
 use auth::OidcProviders;
 use domain::DuckCodec;
 use storage::{
-    CommentRepo, Db, DuckRepo, FlockRepo, FollowRepo, NotificationRepo, PhotoStore, SightingRepo,
-    UserRepo, VesselRepo,
+    CommentRepo, Db, DuckRepo, FlockRepo, FollowRepo, NotificationRepo, OidcFlowRepo, PhotoStore,
+    SightingRepo, UserRepo, VesselRepo,
 };
 
 use crate::config::Caps;
@@ -98,5 +98,9 @@ impl AppState {
 
     pub fn vessels(&self) -> VesselRepo {
         VesselRepo(self.inner.db.pool().clone())
+    }
+
+    pub fn oidc_flows(&self) -> OidcFlowRepo {
+        OidcFlowRepo(self.inner.db.pool().clone())
     }
 }

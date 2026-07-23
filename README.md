@@ -16,9 +16,12 @@ Requires Rust (pinned via `rust-toolchain.toml`) plus Docker or podman.
 docker compose up -d       # Postgres :5432, MinIO :9000, Keycloak :8081
                            # (podman without compose: ./scripts/dev-up.sh)
 cp .env.example .env       # defaults match the dev stack
-./scripts/seed-vessels.sh  # a handful of cruise ships to pick from
 cargo run -p web           # http://localhost:3000
 ```
+
+Migrations run at startup and include a starter vessel list (the Royal
+Caribbean and Princess fleets), so the sighting form has ships to pick
+from on a fresh database.
 
 Log in with the dev Keycloak: users `andrew` / `stranger`, password `duck`
 (imported from `dev/keycloak-realm.json`). Tests: `cargo test --workspace`.
